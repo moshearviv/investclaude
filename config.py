@@ -119,6 +119,42 @@ class Config:
         MACD_CROSSOVER_WEIGHT: float = 0.15      # MACD line crossing above signal line
         RSI_RECOVERY_WEIGHT: float = 0.05        # RSI recovering from oversold condition
 
+    # =============================================================================
+    # Trading Settings
+    # =============================================================================
+    class TradingSettings:
+        """Parameters for defining trade execution and risk management strategies."""
+
+        # Risk Level Breakout Score Thresholds: Minimum breakout_score needed to consider a trade
+        CONSERVATIVE_BREAKOUT_SCORE_MIN: int = 80
+        MODERATE_BREAKOUT_SCORE_MIN: int = 60
+        AGGRESSIVE_BREAKOUT_SCORE_MIN: int = 40
+
+        # Stop-Loss Percentages (from entry price)
+        CONSERVATIVE_STOP_LOSS_PCT: float = 0.03  # 3% stop-loss
+        MODERATE_STOP_LOSS_PCT: float = 0.05    # 5% stop-loss
+        AGGRESSIVE_STOP_LOSS_PCT: float = 0.08    # 8% stop-loss
+
+        # Target Profit Percentages (from entry price)
+        CONSERVATIVE_TARGET_PROFIT_PCT: float = 0.06  # 6% target profit (2:1 R/R with 3% stop)
+        MODERATE_TARGET_PROFIT_PCT: float = 0.10    # 10% target profit (2:1 R/R with 5% stop)
+        AGGRESSIVE_TARGET_PROFIT_PCT: float = 0.15    # 15% target profit (~2:1 R/R with 8% stop)
+        # Note: These are initial target percentages. Risk/Reward will also be calculated.
+
+        # Max Position Size Percentages (of hypothetical total portfolio value)
+        CONSERVATIVE_MAX_POS_SIZE_PCT: float = 0.02  # Max 2% of portfolio in one trade
+        MODERATE_MAX_POS_SIZE_PCT: float = 0.04    # Max 4% of portfolio in one trade
+        AGGRESSIVE_MAX_POS_SIZE_PCT: float = 0.06    # Max 6% of portfolio in one trade
+
+        # ATR Configuration (for dynamic stop-loss/take-profit, future use)
+        ATR_PERIOD: int = 14                             # Period for ATR calculation
+        ATR_STOP_MULTIPLIER: float = 2.0                 # e.g., Entry Price - (2 * ATR)
+        ATR_TARGET_MULTIPLIER_RR: float = 3.0            # e.g., If ATR stop is X, target profit is X * Multiplier (for 3:1 R/R)
+
+        # Default Time Horizon for trades suggested by this system
+        DEFAULT_TRADE_TIME_HORIZON: str = "Short-term (1-4 weeks)"
+
+
 # Helper functions
 def create_cache_dir():
     """Create cache directory if it doesn't exist"""
