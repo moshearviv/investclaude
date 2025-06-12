@@ -41,7 +41,7 @@ except ImportError:
     ta = None # Placeholder
 
 import time # Added for retry delay
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union # Added Union
 from datetime import datetime
 from dataclasses import dataclass
 from config import Config
@@ -93,6 +93,16 @@ class StockAnalysis:
     # Breakout score
     breakout_score: Optional[float] = None
     breakout_reasons: Optional[List[str]] = None
+    # Trading plan fields
+    suggested_entry_price: Optional[float] = None
+    target_price_1: Optional[float] = None
+    stop_loss_price: Optional[float] = None
+    risk_reward_ratio: Optional[float] = None
+    risk_level: Optional[str] = None  # e.g., "Conservative", "Moderate", "Aggressive"
+    max_position_size_pct: Optional[float] = None # e.g., 0.02 for 2%
+    trading_strategy_summary: Optional[str] = None
+    time_horizon: Optional[str] = None
+
 
 class StockAnalyzer:
     def __init__(self):
@@ -102,7 +112,124 @@ class StockAnalyzer:
         else:
             logger.warning("One or more critical libraries failed to load. Functionality may be limited.")
         logger.info("Stock Analyzer initialized")
-    
+
+    def calculate_trading_parameters(self, data: Dict, hist_data: Optional[pd.DataFrame]=None) -> Dict:
+        """
+        Calculates suggested trading parameters based on risk level and breakout score.
+        'hist_data' is included for ATR calculations.
+        """
+        trading_params: Dict[str, Optional[Union[float, str]]] = {
+            'suggested_entry_price': None,
+            'target_price_1': None,
+            'stop_loss_price': None,
+            'risk_reward_ratio': None,
+            'risk_level': "Undefined",
+            'max_position_size_pct': None,
+            'trading_strategy_summary': "Strategy not determined.", # Default summary
+            'current_atr': None,
+            'time_horizon': None # Initialize time_horizon
+        }
+
+        ticker = data.get('ticker', 'Unknown')
+        breakout_score_val = data.get('breakout_score')
+        current_price = data.get('current_price')
+
+        if breakout_score_val is None or current_price is None:
+            logger.warning(f"Ticker '{ticker}': Breakout score ({breakout_score_val}) or current price ({current_price}) is missing. Cannot calculate trading parameters.")
+            trading_params['trading_strategy_summary'] = "Breakout score or current price missing for parameter calculation."
+            return trading_params
+
+        cfg_trading = self.config.TradingSettings
+        risk_level_str = "Undefined"
+        stop_loss_pct = None
+        target_profit_pct = None
+        max_pos_pct = None
+
+        if breakout_score_val >= cfg_trading.CONSERVATIVE_BREAKOUT_SCORE_MIN:
+            risk_level_str = "Conservative"
+            stop_loss_pct = cfg_trading.CONSERVATIVE_STOP_LOSS_PCT
+            target_profit_pct = cfg_trading.CONSERVATIVE_TARGET_PROFIT_PCT
+            max_pos_pct = cfg_trading.CONSERVATIVE_MAX_POS_SIZE_PCT
+        elif breakout_score_val >= cfg_trading.MODERATE_BREAKOUT_SCORE_MIN:
+            risk_level_str = "Moderate"
+            stop_loss_pct = cfg_trading.MODERATE_STOP_LOSS_PCT
+            target_profit_pct = cfg_trading.MODERATE_TARGET_PROFIT_PCT
+            max_pos_pct = cfg_trading.MODERATE_MAX_POS_SIZE_PCT
+        elif breakout_score_val >= cfg_trading.AGGRESSIVE_BREAKOUT_SCORE_MIN:
+            risk_level_str = "Aggressive"
+            stop_loss_pct = cfg_trading.AGGRESSIVE_STOP_LOSS_PCT
+            target_profit_pct = cfg_trading.AGGRESSIVE_TARGET_PROFIT_PCT
+            max_pos_pct = cfg_trading.AGGRESSIVE_MAX_POS_SIZE_PCT
+        else:
+            logger.info(f"Ticker '{ticker}': Breakout score {breakout_score_val:.1f} is below defined thresholds for a trade.")
+            trading_params['risk_level'] = risk_level_str # Will be "Undefined"
+            trading_params['trading_strategy_summary'] = f"No actionable trade setup: Breakout score {breakout_score_val:.1f} too low."
+            return trading_params
+
+        trading_params['risk_level'] = risk_level_str
+        trading_params['max_position_size_pct'] = max_pos_pct
+        trading_params['time_horizon'] = cfg_trading.DEFAULT_TRADE_TIME_HORIZON # Assign time horizon for valid trades
+
+        suggested_entry = current_price
+        trading_params['suggested_entry_price'] = suggested_entry
+
+        if stop_loss_pct is not None and suggested_entry is not None:
+            trading_params['stop_loss_price'] = suggested_entry * (1 - stop_loss_pct)
+
+        if target_profit_pct is not None and suggested_entry is not None:
+            trading_params['target_price_1'] = suggested_entry * (1 + target_profit_pct)
+
+        sl_price = trading_params['stop_loss_price']
+        tp_price = trading_params['target_price_1']
+
+        rr_ratio_val = None # Local variable for R/R
+        if suggested_entry is not None and isinstance(sl_price, (float, int)) and isinstance(tp_price, (float, int)):
+            potential_reward = tp_price - suggested_entry
+            potential_risk = suggested_entry - sl_price
+            if potential_risk > 0.0001:
+                rr_ratio_val = potential_reward / potential_risk
+                trading_params['risk_reward_ratio'] = rr_ratio_val
+            else:
+                logger.warning(f"Ticker '{ticker}': Potential risk is zero or negative. R/R not calculated. Entry: {suggested_entry}, SL: {sl_price}")
+
+        # ATR Calculation
+        current_atr_val = None # Local variable for ATR
+        if ta and hist_data is not None and not hist_data.empty and \
+           all(col in hist_data.columns for col in ['High', 'Low', 'Close']):
+            try:
+                if len(hist_data['Close']) >= cfg_trading.ATR_PERIOD:
+                    atr_indicator = ta.volatility.AverageTrueRange(
+                        high=hist_data['High'],
+                        low=hist_data['Low'],
+                        close=hist_data['Close'],
+                        window=cfg_trading.ATR_PERIOD
+                    )
+                    calculated_atr = atr_indicator.average_true_range().iloc[-1]
+                    if pd.notna(calculated_atr):
+                         trading_params['current_atr'] = calculated_atr
+                         current_atr_val = calculated_atr # For summary string
+                         logger.debug(f"Ticker '{ticker}': Calculated ATR({cfg_trading.ATR_PERIOD}) = {current_atr_val:.2f}")
+                else:
+                    logger.debug(f"Ticker '{ticker}': Not enough data for ATR({cfg_trading.ATR_PERIOD}) calculation.")
+            except Exception as e_atr:
+                logger.error(f"Ticker '{ticker}': Error calculating ATR: {e_atr}", exc_info=True)
+
+        # Refined Trading Strategy Summary
+        summary = f"Strategy: {risk_level_str}"
+        if suggested_entry is not None: summary += f" | Entry: Market ~${suggested_entry:.2f} on breakout confirmation"
+        if sl_price is not None: summary += f" | SL: ~${sl_price:.2f}"
+        if tp_price is not None: summary += f" | TP1: ~${tp_price:.2f}"
+        if rr_ratio_val is not None: summary += f" | R/R: {rr_ratio_val:.2f}:1"
+        if max_pos_pct is not None: summary += f" | Max Pos Size: {max_pos_pct:.0%}"
+        if trading_params['time_horizon'] is not None: summary += f" | Horizon: {trading_params['time_horizon']}"
+        # Could add ATR to summary if desired:
+        # if current_atr_val is not None: summary += f" | ATR({cfg_trading.ATR_PERIOD}): {current_atr_val:.2f}"
+
+        trading_params['trading_strategy_summary'] = summary
+        logger.info(f"Ticker '{ticker}': Trading parameters. Summary: {summary}")
+
+        return trading_params
+
     def get_sp500_tickers(self) -> List[str]:
         try:
             if not pd:
@@ -548,6 +675,7 @@ class StockAnalyzer:
                 'rsi_recovered_from_oversold': rsi_recovered_from_oversold,
                 'macd_line': current_macd_line if pd.notna(current_macd_line) else None,
                 'macd_signal_line': current_macd_signal if pd.notna(current_macd_signal) else None,
+                'hist_data_df': hist.copy() if hist is not None else None,
             }
             return return_dict
         except Exception as e:
@@ -785,6 +913,11 @@ class StockAnalyzer:
             fundamental_score, fundamental_reasons = self.calculate_fundamental_score(data)
             breakout_score, breakout_reasons = self.calculate_breakout_score(data)
             
+            # Retrieve hist_data_df from data dictionary to pass to calculate_trading_parameters
+            hist_df_for_trading_params = data.get('hist_data_df')
+            trading_parameters = self.calculate_trading_parameters(data, hist_df_for_trading_params)
+
+
             overall_score = ( # Current overall_score remains unchanged, breakout_score is separate
                 technical_score * self.config.ScoringWeights.TECHNICAL_WEIGHT +
                 fundamental_score * self.config.ScoringWeights.FUNDAMENTAL_WEIGHT +
@@ -823,12 +956,21 @@ class StockAnalyzer:
                 debt_to_equity=data['debt_to_equity'],
                 technical_score=technical_score,
                 fundamental_score=fundamental_score,
-                overall_score=overall_score, # Original overall score
-                breakout_score=breakout_score, # New breakout score
+                overall_score=overall_score,
+                breakout_score=breakout_score,
                 recommendation=recommendation,
                 confidence=confidence,
-                reasons=all_reasons, # These are general tech/fund reasons
-                breakout_reasons=breakout_reasons # New breakout reasons
+                reasons=all_reasons,
+                breakout_reasons=breakout_reasons,
+                # Add new trading parameters
+                suggested_entry_price=trading_parameters.get('suggested_entry_price'),
+                target_price_1=trading_parameters.get('target_price_1'),
+                stop_loss_price=trading_parameters.get('stop_loss_price'),
+                risk_reward_ratio=trading_parameters.get('risk_reward_ratio'),
+                risk_level=trading_parameters.get('risk_level'),
+                max_position_size_pct=trading_parameters.get('max_position_size_pct'),
+                trading_strategy_summary=trading_parameters.get('trading_strategy_summary'),
+                time_horizon=trading_parameters.get('time_horizon')
             )
         except Exception as e:
             logger.error(f"Unexpected error during detailed analysis of ticker '{data.get('ticker', ticker)}': {e}", exc_info=True) # Use normalized ticker if available
@@ -882,7 +1024,7 @@ def main():
     
     # analyze_multiple_stocks returns a list of StockAnalysis objects for successfully analyzed stocks
     analyzed_results = analyzer.analyze_multiple_stocks(test_tickers)
-    
+
     successfully_analyzed_tickers = {result.ticker for result in analyzed_results} # Normalized tickers
 
     print("\n📋 Test Analysis Summary:")
@@ -902,26 +1044,29 @@ def main():
         if found_analysis:
             print(f"\n✅ {found_analysis.ticker} ({found_analysis.company_name}):")
             print(f"  Price: ${found_analysis.current_price:.2f}")
-            print(f"  Price: ${found_analysis.current_price:.2f}, RSI: {found_analysis.rsi:.2f if found_analysis.rsi is not None else 'N/A'}")
-            print(f"  Overall Score: {found_analysis.overall_score:.1f}/100, Recommendation: {found_analysis.recommendation} ({found_analysis.confidence:.0%})")
-            if found_analysis.reasons:
-                print(f"  Std. Reasons: {'; '.join(found_analysis.reasons)}")
+            print(f"  Price: ${found_analysis.current_price:.2f}, RSI: {found_analysis.rsi:.2f if found_analysis.rsi is not None else 'N/A'}") # type: ignore
+            print(f"  Overall Score: {found_analysis.overall_score:.1f}/100, Recommendation: {found_analysis.recommendation} ({found_analysis.confidence:.0%})") # type: ignore
+            if found_analysis.reasons: # type: ignore
+                print(f"  Std. Reasons: {'; '.join(found_analysis.reasons)}") # type: ignore
 
-            print(f"  --- Breakout Signals ---")
-            print(f"    Volume Breakout: {found_analysis.is_volume_breakout} (Ratio: {found_analysis.volume_ratio:.2f})" if found_analysis.volume_ratio is not None else "    Volume Breakout: N/A")
-            print(f"    N-Day High Breakout: {found_analysis.breakout_n_day_high} (High: {found_analysis.n_day_high:.2f})" if found_analysis.n_day_high is not None else "    N-Day High Breakout: N/A")
-            # print(f"    N-Day Low Breakdown: {found_analysis.breakdown_n_day_low} (Low: {found_analysis.n_day_low:.2f})" if found_analysis.n_day_low is not None else "    N-Day Low Breakdown: N/A") # Optional to print breakdown
-            print(f"    SMA 20/50 Bullish Cross: {found_analysis.sma_20_50_crossed_bullish}")
-            print(f"    SMA 50/200 Bullish Cross: {found_analysis.sma_50_200_crossed_bullish}")
-            print(f"    BB Upper Breakout: {found_analysis.bb_breakout_upper} (Upper BB: {found_analysis.bb_upper:.2f})" if found_analysis.bb_upper is not None else "    BB Upper Breakout: N/A")
-            print(f"    BB Squeeze: {found_analysis.bb_squeeze}")
-            print(f"    MACD Bullish Crossover: {found_analysis.macd_bullish_crossover} (MACD: {found_analysis.macd_line:.2f}, Signal: {found_analysis.macd_signal_line:.2f})" if found_analysis.macd_line is not None and found_analysis.macd_signal_line is not None else "    MACD Bullish Crossover: N/A")
-            print(f"    RSI Recovered from Oversold: {found_analysis.rsi_recovered_from_oversold}")
+            print(f"  --- Breakout Signals & Score ---")
+            # Individual signals are now part of the trading plan summary or can be logged for debug
+            if found_analysis.breakout_score is not None: # type: ignore
+                print(f"    Breakout Score: {found_analysis.breakout_score:.1f}/100") # type: ignore
+            if found_analysis.breakout_reasons: # type: ignore
+                print(f"    Breakout Reasons: {'; '.join(found_analysis.breakout_reasons)}") # type: ignore
 
-            if found_analysis.breakout_score is not None:
-                print(f"  Breakout Score: {found_analysis.breakout_score:.1f}/100")
-            if found_analysis.breakout_reasons:
-                print(f"  Breakout Reasons: {'; '.join(found_analysis.breakout_reasons)}")
+            print(f"  --- Trading Plan ({found_analysis.risk_level}) ---") # type: ignore
+            if found_analysis.trading_strategy_summary: # type: ignore
+                # More detailed print for each component of the trading plan
+                print(f"    Summary: {found_analysis.trading_strategy_summary}") # type: ignore
+                if found_analysis.suggested_entry_price is not None:print(f"      Suggested Entry: ~${found_analysis.suggested_entry_price:.2f}") # type: ignore
+                if found_analysis.stop_loss_price is not None: print(f"      Stop-Loss: ~${found_analysis.stop_loss_price:.2f}") # type: ignore
+                if found_analysis.target_price_1 is not None: print(f"      Target 1: ~${found_analysis.target_price_1:.2f}") # type: ignore
+                if found_analysis.risk_reward_ratio is not None: print(f"      Risk/Reward Ratio: {found_analysis.risk_reward_ratio:.2f}:1") # type: ignore
+                if found_analysis.max_position_size_pct is not None: print(f"      Max Position Size: {found_analysis.max_position_size_pct:.0%}") # type: ignore
+            else:
+                print("    No trading plan generated (e.g., breakout score too low or data missing).")
         else:
             # This ticker_input was not successfully analyzed. Logs should indicate why.
             print(f"\n❌ {ticker_input.upper()}: Analysis failed or skipped (see logs for details).")
