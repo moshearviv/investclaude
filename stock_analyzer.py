@@ -65,6 +65,34 @@ class StockAnalysis:
     recommendation: str
     confidence: float
     reasons: List[str]
+    # New fields for breakout signals
+    is_volume_breakout: Optional[bool] = None
+    volume_ratio: Optional[float] = None
+    # MA Crossover signals
+    sma_20_50_crossed_bullish: Optional[bool] = None
+    sma_50_200_crossed_bullish: Optional[bool] = None
+    sma_20_50_crossed_bearish: Optional[bool] = None
+    sma_50_200_crossed_bearish: Optional[bool] = None
+    # Bollinger Band signals
+    bb_breakout_upper: Optional[bool] = None
+    bb_squeeze: Optional[bool] = None
+    bb_upper: Optional[float] = None
+    bb_lower: Optional[float] = None
+    bb_ma: Optional[float] = None
+    # N-day High/Low breakout signals
+    breakout_n_day_high: Optional[bool] = None
+    breakdown_n_day_low: Optional[bool] = None
+    n_day_high: Optional[float] = None
+    n_day_low: Optional[float] = None
+    # MACD Crossover and RSI Recovery
+    macd_bullish_crossover: Optional[bool] = None
+    macd_bearish_crossover: Optional[bool] = None
+    rsi_recovered_from_oversold: Optional[bool] = None
+    macd_line: Optional[float] = None
+    macd_signal_line: Optional[float] = None
+    # Breakout score
+    breakout_score: Optional[float] = None
+    breakout_reasons: Optional[List[str]] = None
 
 class StockAnalyzer:
     def __init__(self):
@@ -218,15 +246,273 @@ class StockAnalyzer:
             # Check if any essential calculated values are None (current_price and rsi are most critical for this check)
             if current_price is None or rsi is None: # type: ignore
                  logger.error(f"Ticker '{ticker}': Critical indicators (current price or RSI) are None. current_price: {current_price}, rsi: {rsi}. Cannot proceed with this stock.") # type: ignore
-                     return None
+                 return None
 
-            return {
+            # Initialize all new signal values
+            is_volume_breakout = False
+            volume_ratio = None
+            sma_20_50_crossed_bullish = None
+            sma_50_200_crossed_bullish = None
+            sma_20_50_crossed_bearish = None
+            sma_50_200_crossed_bearish = None
+            bb_breakout_upper = None
+            bb_squeeze = None
+            bb_upper = None
+            bb_lower = None
+            bb_ma = None
+            # N-day High/Low breakout signals
+            breakout_n_day_high_signal = None # Renamed to avoid conflict with dict key
+            breakdown_n_day_low_signal = None # Renamed
+            n_day_high_value = None           # Renamed
+            n_day_low_value = None            # Renamed
+            # MACD Crossover and RSI Recovery
+            macd_bullish_crossover = None
+            macd_bearish_crossover = None
+            rsi_recovered_from_oversold = None
+            current_macd_line = None
+            current_macd_signal = None
+
+
+            # SMA200 Calculation
+            sma_200 = None
+            min_len_for_sma200 = self.config.TechnicalThresholds.SMA_LONG
+            if len(hist['Close']) >= min_len_for_sma200:
+                sma_200_series = hist['Close'].rolling(window=min_len_for_sma200, min_periods=max(1, min_len_for_sma200 // 2)).mean()
+                if not sma_200_series.empty:
+                    sma_200 = sma_200_series.iloc[-1] # Get the last value
+            else:
+                logger.debug(f"Ticker '{ticker}': Not enough data points ({len(hist['Close'])}) for SMA200 calculation (period: {min_len_for_sma200}).")
+
+            # MA Crossover Detections
+            # Ensure we have at least 2 data points for SMAs to detect a crossover from previous to current
+            if len(hist['Close']) >= 2: # General check for iloc[-2] access
+                # Helper function for crossover detection
+                def get_sma_series(window, min_p):
+                    if len(hist['Close']) >= window:
+                        return hist['Close'].rolling(window=window, min_periods=min_p).mean()
+                    return None
+
+                sma_20_series = get_sma_series(self.config.TechnicalThresholds.SMA_SHORT, max(1, self.config.TechnicalThresholds.SMA_SHORT // 2))
+                sma_50_series = get_sma_series(self.config.TechnicalThresholds.SMA_MEDIUM, max(1, self.config.TechnicalThresholds.SMA_MEDIUM // 2))
+                sma_200_series_for_crossover = get_sma_series(self.config.TechnicalThresholds.SMA_LONG, max(1, self.config.TechnicalThresholds.SMA_LONG//2))
+
+
+                if sma_20_series is not None and sma_50_series is not None and len(sma_20_series) >=2 and len(sma_50_series) >=2:
+                    if pd.notna(sma_20_series.iloc[-1]) and pd.notna(sma_50_series.iloc[-1]) and \
+                       pd.notna(sma_20_series.iloc[-2]) and pd.notna(sma_50_series.iloc[-2]):
+                        sma_20_50_crossed_bullish = sma_20_series.iloc[-1] > sma_50_series.iloc[-1] and \
+                                                    sma_20_series.iloc[-2] <= sma_50_series.iloc[-2]
+                        sma_20_50_crossed_bearish = sma_20_series.iloc[-1] < sma_50_series.iloc[-1] and \
+                                                    sma_20_series.iloc[-2] >= sma_50_series.iloc[-2]
+
+                if sma_50_series is not None and sma_200_series_for_crossover is not None and len(sma_50_series) >=2 and len(sma_200_series_for_crossover) >=2 :
+                    if pd.notna(sma_50_series.iloc[-1]) and pd.notna(sma_200_series_for_crossover.iloc[-1]) and \
+                       pd.notna(sma_50_series.iloc[-2]) and pd.notna(sma_200_series_for_crossover.iloc[-2]):
+                        sma_50_200_crossed_bullish = sma_50_series.iloc[-1] > sma_200_series_for_crossover.iloc[-1] and \
+                                                     sma_50_series.iloc[-2] <= sma_200_series_for_crossover.iloc[-2]
+                        sma_50_200_crossed_bearish = sma_50_series.iloc[-1] < sma_200_series_for_crossover.iloc[-1] and \
+                                                     sma_50_series.iloc[-2] >= sma_200_series_for_crossover.iloc[-2]
+
+            # Bollinger Bands Calculation
+            if ta: # Check if 'ta' library was imported successfully
+                bb_config = self.config.BreakoutTechnicalThresholds
+                if len(hist['Close']) >= bb_config.BB_WINDOW:
+                    try:
+                        indicator_bb = ta.volatility.BollingerBands(close=hist['Close'], window=bb_config.BB_WINDOW, window_dev=bb_config.BB_STD_DEV)
+                        bb_ma_series = indicator_bb.bollinger_mavg()
+                        bb_upper_series = indicator_bb.bollinger_hband()
+                        bb_lower_series = indicator_bb.bollinger_lband()
+
+                        if not all(s.empty for s in [bb_ma_series, bb_upper_series, bb_lower_series]):
+                            bb_ma = bb_ma_series.iloc[-1]
+                            bb_upper = bb_upper_series.iloc[-1]
+                            bb_lower = bb_lower_series.iloc[-1]
+
+                            if pd.notna(current_price) and pd.notna(bb_upper):
+                                bb_breakout_upper = current_price > bb_upper
+
+                            if pd.notna(bb_upper) and pd.notna(bb_lower) and pd.notna(bb_ma) and bb_ma > 0: # bb_ma > 0 for squeeze calc
+                                bb_squeeze = (bb_upper - bb_lower) < (bb_ma * bb_config.BB_SQUEEZE_STD_THRESHOLD)
+                            else:
+                                logger.debug(f"Ticker '{ticker}': BB values NaN, cannot calculate squeeze. MA:{bb_ma} Upper:{bb_upper} Lower:{bb_lower}")
+                        else:
+                            logger.warning(f"Ticker '{ticker}': Bollinger Band series are empty. Skipping BB calculations.")
+                    except Exception as e_bb:
+                        logger.error(f"Ticker '{ticker}': Error calculating Bollinger Bands: {e_bb}", exc_info=True)
+                else:
+                    logger.debug(f"Ticker '{ticker}': Not enough data points ({len(hist['Close'])}) for Bollinger Bands (window: {bb_config.BB_WINDOW}).")
+            else:
+                logger.warning(f"Ticker '{ticker}': Technical Analysis (ta) library not available. Skipping Bollinger Band calculations.")
+
+            # N-day High/Low Breakout Calculation
+            n_period_high_low = self.config.TechnicalThresholds.SMA_MEDIUM # Using 50-day period for N-day H/L
+
+            if 'High' not in hist.columns or 'Low' not in hist.columns or hist['High'].empty or hist['Low'].empty:
+                logger.warning(f"Ticker '{ticker}': 'High' or 'Low' columns not found or empty. Skipping N-day High/Low breakout.")
+            elif len(hist['Close']) < n_period_high_low: # Need enough data for the N-day period
+                logger.debug(f"Ticker '{ticker}': Not enough data points ({len(hist['Close'])}) for N-day High/Low (period: {n_period_high_low}).")
+            else:
+                # Calculate N-day high, excluding the current day's high for breakout context (compare current close to past N-day high)
+                # So, use .iloc[:-1] to get all rows except the last, then roll.
+                n_day_high_value = hist['High'].iloc[:-1].rolling(window=n_period_high_low, min_periods=max(1, n_period_high_low // 2)).max().iloc[-1]
+                n_day_low_value = hist['Low'].iloc[:-1].rolling(window=n_period_high_low, min_periods=max(1, n_period_high_low // 2)).min().iloc[-1]
+
+                if pd.notna(current_price) and pd.notna(n_day_high_value):
+                    if current_price > n_day_high_value:
+                        breakout_n_day_high_signal = True
+                        logger.info(f"Ticker '{ticker}': Price broke above {n_period_high_low}-day high of {n_day_high_value:.2f}")
+                    else:
+                        breakout_n_day_high_signal = False # Explicitly false if not a breakout
+
+                if pd.notna(current_price) and pd.notna(n_day_low_value):
+                    if current_price < n_day_low_value:
+                        breakdown_n_day_low_signal = True
+                        logger.info(f"Ticker '{ticker}': Price broke below {n_period_high_low}-day low of {n_day_low_value:.2f}")
+                    else:
+                        breakdown_n_day_low_signal = False # Explicitly false
+
+            # Ensure n_day_high_value and n_day_low_value are None if not calculated, for dict consistency
+            if 'n_day_high_value' in locals() and pd.isna(n_day_high_value): n_day_high_value = None # Should be assigned None if not calculable
+            if 'n_day_low_value' in locals() and pd.isna(n_day_low_value): n_day_low_value = None   # Should be assigned None if not calculable
+
+            # MACD Calculation and Crossover Detection
+            if ta:
+                macd_cfg = self.config.BreakoutTechnicalThresholds
+                min_len_for_macd = macd_cfg.MACD_SLOW_PERIOD + macd_cfg.MACD_SIGNAL_PERIOD # Approximate min length
+                if len(hist['Close']) >= min_len_for_macd:
+                    try:
+                        macd_indicator = ta.trend.MACD(close=hist['Close'],
+                                                       window_slow=macd_cfg.MACD_SLOW_PERIOD,
+                                                       window_fast=macd_cfg.MACD_FAST_PERIOD,
+                                                       window_sign=macd_cfg.MACD_SIGNAL_PERIOD)
+                        macd_line_series = macd_indicator.macd()
+                        macd_signal_series = macd_indicator.macd_signal()
+
+                        if not macd_line_series.empty and not macd_signal_series.empty and \
+                           len(macd_line_series) >= 2 and len(macd_signal_series) >= 2:
+                            current_macd_line = macd_line_series.iloc[-1]
+                            current_macd_signal = macd_signal_series.iloc[-1]
+
+                            if pd.notna(current_macd_line) and pd.notna(current_macd_signal) and \
+                               pd.notna(macd_line_series.iloc[-2]) and pd.notna(macd_signal_series.iloc[-2]):
+                                macd_bullish_crossover = current_macd_line > current_macd_signal and \
+                                                         macd_line_series.iloc[-2] <= macd_signal_series.iloc[-2]
+                                macd_bearish_crossover = current_macd_line < current_macd_signal and \
+                                                         macd_line_series.iloc[-2] >= macd_signal_series.iloc[-2]
+                        else:
+                            logger.debug(f"Ticker '{ticker}': MACD series too short or empty for crossover detection.")
+                    except Exception as e_macd:
+                        logger.error(f"Ticker '{ticker}': Error calculating MACD: {e_macd}", exc_info=True)
+                else:
+                    logger.debug(f"Ticker '{ticker}': Not enough data points ({len(hist['Close'])}) for MACD (needs approx {min_len_for_macd}).")
+            else:
+                logger.warning(f"Ticker '{ticker}': Technical Analysis (ta) library not available. Skipping MACD calculations.")
+
+            # RSI Recovery from Oversold Detection
+            # The existing `rsi` variable holds the latest RSI value. We need a series for recovery detection.
+            if ta:
+                # Standard RSI period is 14, already used for the single `rsi` value.
+                # Let's ensure we have enough data for a small lookback for the recovery check.
+                # The existing `rsi` is iloc[-1] of a 14-period rolling calculation on diffs.
+                # For recovery, we need to see if it *was* oversold recently.
+                # The current `rsi` value calculation is manual. For simplicity & consistency, let's use ta.momentum.RSIIndicator
+                # if we need the series. The existing `rsi` is fine if we only check current rsi vs previous rsi.
+                # However, the prompt asks for "any(rsi_series.iloc[-5:-1] < self.config.TechnicalThresholds.RSI_OVERSOLD))"
+                # This implies needing an RSI series.
+
+                rsi_cfg_recovery_lookback = 5 # How many previous periods to check for oversold state
+                min_len_for_rsi_series = 14 + rsi_cfg_recovery_lookback # RSI period + lookback
+
+                if len(hist['Close']) >= min_len_for_rsi_series:
+                    try:
+                        rsi_indicator_series_calc = ta.momentum.RSIIndicator(close=hist['Close'], window=14) # Default RSI window
+                        rsi_series = rsi_indicator_series_calc.rsi()
+
+                        if not rsi_series.empty and len(rsi_series) >= rsi_cfg_recovery_lookback : # Need at least lookback period entries
+                            current_rsi_value_for_recovery = rsi_series.iloc[-1] # This should be very close to 'rsi' var
+
+                            # Check if RSI was oversold in the recent past (e.g., previous 1 to 4 days)
+                            # and is now above the recovery confirmation level.
+                            # iloc[-5:-1] means indices from (length-5) up to (length-2), so -2, -3, -4, -5 relative to end.
+                            # Ensure indices are valid if series is short, though len check above should help.
+                            # A simple check: current > recovery_confirmation and previous <= oversold_threshold
+                            # previous_rsi_value = rsi_series.iloc[-2]
+                            # rsi_recovered_from_oversold = (pd.notna(current_rsi_value_for_recovery) and pd.notna(previous_rsi_value) and
+                            #                               current_rsi_value_for_recovery > self.config.BreakoutTechnicalThresholds.RSI_RECOVERY_CONFIRMATION and
+                            #                               previous_rsi_value <= self.config.TechnicalThresholds.RSI_OVERSOLD)
+
+                            # Using the "any in last X days" logic from prompt:
+                            if pd.notna(current_rsi_value_for_recovery):
+                                if current_rsi_value_for_recovery > self.config.BreakoutTechnicalThresholds.RSI_RECOVERY_CONFIRMATION:
+                                    # Ensure the slice [-rsi_cfg_recovery_lookback:-1] is valid
+                                    # Check if any of the values in the slice (from index -lookback up to -2) were oversold
+                                    # e.g., for lookback 5: indices -5, -4, -3, -2
+                                    # Make sure series has enough points for this slice. len(rsi_series) must be >= lookback
+                                    if len(rsi_series) > rsi_cfg_recovery_lookback: # e.g. if lookback is 5, need at least 6 items for series[-1] and series[-lookback-1] which is series[-6]
+                                         # Correct slice would be from -(lookback_window + 1) up to -2 (exclusive of -1 which is current)
+                                         # e.g., for lookback 5, check from hist.iloc[-6] to hist.iloc[-2]
+                                        past_rsi_slice = rsi_series.iloc[-(rsi_cfg_recovery_lookback +1) : -1]
+                                        if not past_rsi_slice.empty and any(past_rsi_slice < self.config.TechnicalThresholds.RSI_OVERSOLD):
+                                            rsi_recovered_from_oversold = True
+                                        else:
+                                            rsi_recovered_from_oversold = False # Not recovered or wasn't oversold
+                                    else: # Not enough historical RSI points for the lookback window.
+                                        rsi_recovered_from_oversold = False # Cannot confirm recovery
+                                else:
+                                    rsi_recovered_from_oversold = False # Not above recovery threshold
+                            else:
+                                rsi_recovered_from_oversold = False # Current RSI is NaN
+                        else:
+                             logger.debug(f"Ticker '{ticker}': RSI series too short or empty for recovery detection.")
+                             rsi_recovered_from_oversold = False
+                    except Exception as e_rsi_rec:
+                        logger.error(f"Ticker '{ticker}': Error calculating RSI series for recovery: {e_rsi_rec}", exc_info=True)
+                        rsi_recovered_from_oversold = False
+                else:
+                    logger.debug(f"Ticker '{ticker}': Not enough data points ({len(hist['Close'])}) for RSI Recovery (needs approx {min_len_for_rsi_series}).")
+                    rsi_recovered_from_oversold = False # Default if not enough data
+            else:
+                logger.warning(f"Ticker '{ticker}': Technical Analysis (ta) library not available. Skipping RSI Recovery calculations.")
+                rsi_recovered_from_oversold = False
+
+
+            # Volume Breakout Calculation (existing code from previous step)
+            if 'Volume' not in hist.columns or hist['Volume'].empty:
+                logger.warning(f"Ticker '{ticker}': 'Volume' column not found in history or is empty. Skipping volume breakout calculation.")
+            else:
+                vol_avg_period = self.config.BreakoutTechnicalThresholds.VOLUME_AVG_PERIOD
+                # Ensure min_periods is at least 1 and not more than the window itself.
+                min_periods_vol = max(1, min(vol_avg_period // 2, vol_avg_period))
+
+                if len(hist['Volume']) >= min_periods_vol: # Check if there's enough data for a meaningful average
+                    avg_volume = hist['Volume'].rolling(window=vol_avg_period, min_periods=min_periods_vol).mean().iloc[-1]
+                    current_volume = hist['Volume'].iloc[-1]
+
+                    if pd.isna(avg_volume) or avg_volume == 0:
+                        logger.warning(f"Ticker '{ticker}': Average volume is NaN or zero (avg_volume: {avg_volume}). Volume ratio cannot be calculated.")
+                        # volume_ratio remains None
+                    elif pd.isna(current_volume):
+                        logger.warning(f"Ticker '{ticker}': Current volume is NaN. Volume ratio cannot be calculated.")
+                        # volume_ratio remains None
+                    else:
+                        volume_ratio = current_volume / avg_volume
+                        if volume_ratio >= self.config.BreakoutTechnicalThresholds.VOLUME_SURGE_MULTIPLIER:
+                            is_volume_breakout = True
+                            logger.info(f"Ticker '{ticker}': Volume breakout detected! Ratio: {volume_ratio:.2f}")
+                        else:
+                            logger.debug(f"Ticker '{ticker}': No volume breakout. Ratio: {volume_ratio:.2f}")
+                else:
+                    logger.warning(f"Ticker '{ticker}': Not enough data points ({len(hist['Volume'])}) for average volume calculation (period: {vol_avg_period}, min_periods: {min_periods_vol}).")
+
+
+            return_dict = {
                 'ticker': ticker, # Normalized ticker
                 'company_name': info.get('longName', original_ticker), # Use original ticker for company name if longName is missing
                 'current_price': current_price,
                 'sector': info.get('sector', 'Unknown'),
                 'market_cap': info.get('marketCap', 0),
-                'volume': hist['Volume'].iloc[-1] if 'Volume' in hist.columns and not hist['Volume'].empty else 0,
+                # Use current_volume if calculated, otherwise default from hist (which might be 0 if column missing)
+                'volume': current_volume if 'current_volume' in locals() and pd.notna(current_volume) else (hist['Volume'].iloc[-1] if 'Volume' in hist.columns and not hist['Volume'].empty else 0),
                 'rsi': rsi,
                 'sma_20': sma_20,
                 'sma_50': sma_50 if sma_50 is not None else sma_20, # Fallback sma_50 to sma_20 if it was not calculable
@@ -234,8 +520,36 @@ class StockAnalyzer:
                 'pe_ratio': info.get('trailingPE'), # Allow None for PE
                 'roe': info.get('returnOnEquity'), # Allow None
                 'debt_to_equity': info.get('debtToEquity'), # Allow None
-                'profit_margin': info.get('profitMargins') # Allow None
+                'profit_margin': info.get('profitMargins'), # Allow None
+                # New breakout fields
+                'is_volume_breakout': is_volume_breakout,
+                'volume_ratio': volume_ratio,
+                # MA Crossover signals
+                'sma_20_50_crossed_bullish': sma_20_50_crossed_bullish,
+                'sma_50_200_crossed_bullish': sma_50_200_crossed_bullish,
+                'sma_20_50_crossed_bearish': sma_20_50_crossed_bearish,
+                'sma_50_200_crossed_bearish': sma_50_200_crossed_bearish,
+                # Bollinger Band signals
+                'bb_breakout_upper': bb_breakout_upper,
+                'bb_squeeze': bb_squeeze,
+                'bb_upper': bb_upper,
+                'bb_lower': bb_lower,
+                'bb_ma': bb_ma,
+                # Store SMA200 for potential use in scoring or other signals
+                'sma_200': sma_200 if pd.notna(sma_200) else None,
+                # N-day High/Low breakout signals
+                'breakout_n_day_high': breakout_n_day_high_signal,
+                'breakdown_n_day_low': breakdown_n_day_low_signal,
+                'n_day_high': n_day_high_value,
+                'n_day_low': n_day_low_value,
+                # MACD and RSI Recovery
+                'macd_bullish_crossover': macd_bullish_crossover,
+                'macd_bearish_crossover': macd_bearish_crossover,
+                'rsi_recovered_from_oversold': rsi_recovered_from_oversold,
+                'macd_line': current_macd_line if pd.notna(current_macd_line) else None,
+                'macd_signal_line': current_macd_signal if pd.notna(current_macd_signal) else None,
             }
+            return return_dict
         except Exception as e:
             logger.error(f"Error processing financial data for {ticker} after fetching: {e}", exc_info=True)
             return None
@@ -330,6 +644,87 @@ class StockAnalyzer:
             # return 0.0, ["Current price is N/A, cannot calculate technical score"]
         
         return max(0, min(100, score)), reasons
+
+    def calculate_breakout_score(self, data: Dict) -> Tuple[Optional[float], List[str]]:
+        score = 0.0  # Initialize to 0, as it's an additive score based on positive signals
+        reasons = []
+        ticker = data.get('ticker', 'Unknown') # For logging
+
+        if not data:
+            logger.warning(f"Ticker '{ticker}': No data provided for breakout scoring.")
+            return None, ["No data for breakout scoring"]
+
+        weights = self.config.BreakoutScoringWeights
+
+        # Helper to safely get boolean signals, defaulting to False if None or key missing
+        def get_signal(key: str) -> bool:
+            val = data.get(key)
+            return val if isinstance(val, bool) else False
+
+        is_volume_breakout = get_signal('is_volume_breakout')
+        breakout_n_day_high = get_signal('breakout_n_day_high')
+        sma_20_50_crossed_bullish = get_signal('sma_20_50_crossed_bullish')
+        sma_50_200_crossed_bullish = get_signal('sma_50_200_crossed_bullish')
+        bb_breakout_upper = get_signal('bb_breakout_upper')
+        bb_squeeze = get_signal('bb_squeeze')
+        macd_bullish_crossover = get_signal('macd_bullish_crossover')
+        rsi_recovered_from_oversold = get_signal('rsi_recovered_from_oversold')
+
+        if is_volume_breakout:
+            score += weights.VOLUME_BREAKOUT_WEIGHT * 100
+            reasons.append(f"Volume breakout (ratio: {data.get('volume_ratio', 0.0):.2f}x avg)")
+            logger.debug(f"Ticker '{ticker}': +{weights.VOLUME_BREAKOUT_WEIGHT*100} for volume breakout.")
+
+        if breakout_n_day_high:
+            n_day_high_period = self.config.TechnicalThresholds.SMA_MEDIUM # Assuming this was the period used
+            score += weights.PRICE_BREAKOUT_S_R_WEIGHT * 100
+            reasons.append(f"Price broke {n_day_high_period}-day high ({data.get('n_day_high', 0.0):.2f})")
+            logger.debug(f"Ticker '{ticker}': +{weights.PRICE_BREAKOUT_S_R_WEIGHT*100} for N-day high breakout.")
+
+        # MA Crossovers - prioritize stronger one
+        ma_crossover_scored = False
+        if sma_50_200_crossed_bullish:
+            score += weights.MA_CROSSOVER_WEIGHT * 100
+            reasons.append("Bullish MA Crossover (SMA50 > SMA200)")
+            logger.debug(f"Ticker '{ticker}': +{weights.MA_CROSSOVER_WEIGHT*100} for SMA50/200 crossover.")
+            ma_crossover_scored = True
+        elif sma_20_50_crossed_bullish and not ma_crossover_scored: # Only score if the stronger one hasn't occurred
+            score += weights.MA_CROSSOVER_WEIGHT * 0.75 * 100 # Apply a factor for the less strong signal
+            reasons.append("Bullish MA Crossover (SMA20 > SMA50)")
+            logger.debug(f"Ticker '{ticker}': +{weights.MA_CROSSOVER_WEIGHT*0.75*100} for SMA20/50 crossover.")
+
+        if bb_breakout_upper:
+            score += weights.BB_BREAKOUT_WEIGHT * 100
+            reasons.append(f"Price broke upper Bollinger Band ({data.get('bb_upper', 0.0):.2f})")
+            logger.debug(f"Ticker '{ticker}': +{weights.BB_BREAKOUT_WEIGHT*100} for BB upper breakout.")
+
+        if bb_squeeze:
+            score += weights.BB_SQUEEZE_WEIGHT * 100
+            reasons.append("Bollinger Bands Squeeze (potential energy)")
+            logger.debug(f"Ticker '{ticker}': +{weights.BB_SQUEEZE_WEIGHT*100} for BB squeeze.")
+            # Bonus for breakout from squeeze
+            if bb_breakout_upper:
+                bonus_squeeze_breakout = 0.05 * 100 # Example bonus: 5 points
+                score += bonus_squeeze_breakout
+                reasons.append("Bonus: Breakout from BB Squeeze")
+                logger.debug(f"Ticker '{ticker}': +{bonus_squeeze_breakout} bonus for BB squeeze breakout.")
+
+
+        if macd_bullish_crossover:
+            score += weights.MACD_CROSSOVER_WEIGHT * 100
+            reasons.append("MACD bullish crossover")
+            logger.debug(f"Ticker '{ticker}': +{weights.MACD_CROSSOVER_WEIGHT*100} for MACD crossover.")
+
+        if rsi_recovered_from_oversold:
+            score += weights.RSI_RECOVERY_WEIGHT * 100
+            reasons.append(f"RSI recovered from oversold (RSI: {data.get('rsi', 0.0):.1f})")
+            logger.debug(f"Ticker '{ticker}': +{weights.RSI_RECOVERY_WEIGHT*100} for RSI recovery.")
+
+        if not reasons: # No breakout signals triggered
+            logger.info(f"Ticker '{ticker}': No breakout signals detected for breakout score.")
+            return 0.0, ["No specific breakout signals detected."] # Return 0 score and a neutral reason
+
+        return max(0, min(100, score)), reasons
     
     def calculate_fundamental_score(self, data: Dict) -> Tuple[float, List[str]]:
         score = 50.0
@@ -388,8 +783,9 @@ class StockAnalyzer:
             logger.info(f"Data obtained for '{normalized_ticker}'. Calculating scores...")
             technical_score, technical_reasons = self.calculate_technical_score(data)
             fundamental_score, fundamental_reasons = self.calculate_fundamental_score(data)
+            breakout_score, breakout_reasons = self.calculate_breakout_score(data)
             
-            overall_score = (
+            overall_score = ( # Current overall_score remains unchanged, breakout_score is separate
                 technical_score * self.config.ScoringWeights.TECHNICAL_WEIGHT +
                 fundamental_score * self.config.ScoringWeights.FUNDAMENTAL_WEIGHT +
                 50 * self.config.ScoringWeights.SENTIMENT_WEIGHT
@@ -427,10 +823,12 @@ class StockAnalyzer:
                 debt_to_equity=data['debt_to_equity'],
                 technical_score=technical_score,
                 fundamental_score=fundamental_score,
-                overall_score=overall_score,
+                overall_score=overall_score, # Original overall score
+                breakout_score=breakout_score, # New breakout score
                 recommendation=recommendation,
                 confidence=confidence,
-                reasons=all_reasons
+                reasons=all_reasons, # These are general tech/fund reasons
+                breakout_reasons=breakout_reasons # New breakout reasons
             )
         except Exception as e:
             logger.error(f"Unexpected error during detailed analysis of ticker '{data.get('ticker', ticker)}': {e}", exc_info=True) # Use normalized ticker if available
@@ -477,10 +875,10 @@ def main():
         print("❌ Critical libraries (Pandas or yfinance) failed to load. Please check the log and install missing packages. Exiting.")
         return
 
-    # Test tickers including a bad one and a less common one like BRK-A
-    test_tickers = ['AAPL', 'MSFT', 'GOOG', 'BADTICKER', 'TSLA', 'NVDA', 'BRK-A']
+    # Updated test tickers for breakout system testing
+    test_tickers = ['AAPL', 'MSFT', 'NVDA', 'AMD', 'JNJ', 'FSLY', 'BADTICKER']
 
-    print(f"🧪 Starting test analysis for tickers: {test_tickers}")
+    print(f"🧪 Starting breakout system test analysis for tickers: {test_tickers}")
     
     # analyze_multiple_stocks returns a list of StockAnalysis objects for successfully analyzed stocks
     analyzed_results = analyzer.analyze_multiple_stocks(test_tickers)
@@ -504,15 +902,26 @@ def main():
         if found_analysis:
             print(f"\n✅ {found_analysis.ticker} ({found_analysis.company_name}):")
             print(f"  Price: ${found_analysis.current_price:.2f}")
-            print(f"  RSI: {found_analysis.rsi:.2f}" if found_analysis.rsi is not None else "  RSI: N/A")
-            print(f"  SMA20: {found_analysis.sma_20:.2f}" if found_analysis.sma_20 is not None else "  SMA20: N/A")
-            print(f"  SMA50: {found_analysis.sma_50:.2f}" if found_analysis.sma_50 is not None else "  SMA50: N/A")
-            print(f"  Momentum(20d): {found_analysis.momentum_20d:.2f}%" if found_analysis.momentum_20d is not None else "  Momentum(20d): N/A")
-            print(f"  P/E: {found_analysis.pe_ratio:.2f}" if found_analysis.pe_ratio is not None else "  P/E: N/A")
-            print(f"  Overall Score: {found_analysis.overall_score:.1f}/100")
-            print(f"  Recommendation: {found_analysis.recommendation} (Confidence: {found_analysis.confidence:.0%})")
-            if len(found_analysis.reasons) > 0:
-                print(f"  Reasons: {'; '.join(found_analysis.reasons)}")
+            print(f"  Price: ${found_analysis.current_price:.2f}, RSI: {found_analysis.rsi:.2f if found_analysis.rsi is not None else 'N/A'}")
+            print(f"  Overall Score: {found_analysis.overall_score:.1f}/100, Recommendation: {found_analysis.recommendation} ({found_analysis.confidence:.0%})")
+            if found_analysis.reasons:
+                print(f"  Std. Reasons: {'; '.join(found_analysis.reasons)}")
+
+            print(f"  --- Breakout Signals ---")
+            print(f"    Volume Breakout: {found_analysis.is_volume_breakout} (Ratio: {found_analysis.volume_ratio:.2f})" if found_analysis.volume_ratio is not None else "    Volume Breakout: N/A")
+            print(f"    N-Day High Breakout: {found_analysis.breakout_n_day_high} (High: {found_analysis.n_day_high:.2f})" if found_analysis.n_day_high is not None else "    N-Day High Breakout: N/A")
+            # print(f"    N-Day Low Breakdown: {found_analysis.breakdown_n_day_low} (Low: {found_analysis.n_day_low:.2f})" if found_analysis.n_day_low is not None else "    N-Day Low Breakdown: N/A") # Optional to print breakdown
+            print(f"    SMA 20/50 Bullish Cross: {found_analysis.sma_20_50_crossed_bullish}")
+            print(f"    SMA 50/200 Bullish Cross: {found_analysis.sma_50_200_crossed_bullish}")
+            print(f"    BB Upper Breakout: {found_analysis.bb_breakout_upper} (Upper BB: {found_analysis.bb_upper:.2f})" if found_analysis.bb_upper is not None else "    BB Upper Breakout: N/A")
+            print(f"    BB Squeeze: {found_analysis.bb_squeeze}")
+            print(f"    MACD Bullish Crossover: {found_analysis.macd_bullish_crossover} (MACD: {found_analysis.macd_line:.2f}, Signal: {found_analysis.macd_signal_line:.2f})" if found_analysis.macd_line is not None and found_analysis.macd_signal_line is not None else "    MACD Bullish Crossover: N/A")
+            print(f"    RSI Recovered from Oversold: {found_analysis.rsi_recovered_from_oversold}")
+
+            if found_analysis.breakout_score is not None:
+                print(f"  Breakout Score: {found_analysis.breakout_score:.1f}/100")
+            if found_analysis.breakout_reasons:
+                print(f"  Breakout Reasons: {'; '.join(found_analysis.breakout_reasons)}")
         else:
             # This ticker_input was not successfully analyzed. Logs should indicate why.
             print(f"\n❌ {ticker_input.upper()}: Analysis failed or skipped (see logs for details).")
