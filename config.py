@@ -25,8 +25,9 @@ class Config:
     
     # Performance settings
     DEFAULT_MAX_WORKERS = 5
-    API_TIMEOUT = 30
+    API_TIMEOUT = 30 # seconds
     RETRY_ATTEMPTS = 3
+    RETRY_DELAY_SECONDS = 1 # seconds between retries for yfinance calls
     
     # =============================================================================
     # Data Settings
@@ -38,6 +39,13 @@ class Config:
     
     # Minimum data requirements
     MIN_DATA_POINTS = 50  # Minimum trading days for analysis
+
+    # Fallback ticker list if S&P 500 retrieval fails
+    FALLBACK_TICKERS = [
+        'AAPL', 'MSFT', 'GOOG', 'GOOGL', 'AMZN', 'NVDA', 'TSLA', 'META',
+        'BRK-B', 'UNH', 'JNJ', 'V', 'XOM', 'WMT', 'LLY', 'JPM', 'PG',
+        'MA', 'AVGO', 'HD', 'CVX', 'MRK', 'ABBV', 'PEP', 'KO', 'BAC'
+    ]
     
     # =============================================================================
     # API Settings (Optional)
