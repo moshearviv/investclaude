@@ -1,0 +1,31 @@
+# Basic Requirements for Advanced Stock Analysis System
+# קובץ דרישות בסיסי למערכת ניתוח מניות מתקדמת
+
+# Core Data Libraries
+pandas>=1.5.0
+numpy>=1.21.0
+
+# Financial Data
+yfinance>=0.2.0
+
+# Web Interface
+streamlit>=1.28.0
+
+# Data Visualization
+plotly>=5.0.0
+
+# Technical Analysis
+ta>=0.10.0
+
+# HTTP Requests
+requests>=2.28.0
+
+# Web Scraping (for S&P 500 list)
+beautifulsoup4>=4.11.0
+lxml>=4.9.0
+
+# Optional: Twitter Integration (if API key available)
+tweepy>=4.14.0
+
+# Optional: Sentiment Analysis
+textblob>=0.17.0
