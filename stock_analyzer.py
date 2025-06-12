@@ -1112,4 +1112,4 @@ if __name__ == "__main__":
     # logging.getLogger().setLevel(logging.DEBUG) # Example: Enable DEBUG for more verbose logs
     main()
 
-[end of stock_analyzer.py]
+# [end of stock_analyzer.py]
