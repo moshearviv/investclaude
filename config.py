@@ -66,6 +66,26 @@ class Config:
         SMA_SHORT = 20
         SMA_MEDIUM = 50
         SMA_LONG = 200
+
+    class BreakoutTechnicalThresholds:
+        """Parameters for breakout detection logic"""
+        # Volume Breakout
+        VOLUME_AVG_PERIOD: int = 50         # Average volume calculation period
+        VOLUME_SURGE_MULTIPLIER: float = 2.0  # Multiplier for detecting volume spike
+
+        # Bollinger Bands
+        BB_WINDOW: int = 20                 # Window for BB calculation
+        BB_STD_DEV: int = 2                 # Number of standard deviations for BB
+        # Simpler BB Squeeze: if BB width is less than X times the price's stddev over BB_WINDOW
+        BB_SQUEEZE_STD_THRESHOLD: float = 0.5 # Lower values indicate tighter squeeze relative to price volatility
+
+        # MACD
+        MACD_FAST_PERIOD: int = 12
+        MACD_SLOW_PERIOD: int = 26
+        MACD_SIGNAL_PERIOD: int = 9
+
+        # RSI Recovery (use existing RSI_OVERSOLD from TechnicalThresholds)
+        RSI_RECOVERY_CONFIRMATION: int = 35 # RSI must cross above this after being oversold
     
     class FundamentalThresholds:
         """Fundamental analysis thresholds"""
@@ -87,6 +107,17 @@ class Config:
         BUY_THRESHOLD = 60
         HOLD_THRESHOLD = 40
         SELL_THRESHOLD = 25
+
+    class BreakoutScoringWeights:
+        """Weights for individual breakout signals - how much each signal contributes to a 'breakout score'"""
+        # These are relative strengths of signals, not necessarily summing to 1 unless part of a combined score.
+        VOLUME_BREAKOUT_WEIGHT: float = 0.15
+        PRICE_BREAKOUT_S_R_WEIGHT: float = 0.20  # Placeholder for Support/Resistance breakout
+        MA_CROSSOVER_WEIGHT: float = 0.20        # e.g., Price crossing above SMA50 or SMA20/SMA50 crossover
+        BB_BREAKOUT_WEIGHT: float = 0.15         # Price breaking above upper Bollinger Band
+        BB_SQUEEZE_WEIGHT: float = 0.10          # Strength of the Bollinger Band Squeeze itself (potential energy)
+        MACD_CROSSOVER_WEIGHT: float = 0.15      # MACD line crossing above signal line
+        RSI_RECOVERY_WEIGHT: float = 0.05        # RSI recovering from oversold condition
 
 # Helper functions
 def create_cache_dir():
