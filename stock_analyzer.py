@@ -52,13 +52,13 @@ class StockAnalysis:
     company_name: str
     current_price: float
     sector: str
-    rsi: float
-    sma_20: float
-    sma_50: float
-    momentum_20d: float
-    pe_ratio: float
-    roe: float
-    debt_to_equity: float
+    rsi: float # Optional[float] might be better if it can be None
+    sma_20: float # Optional[float]
+    sma_50: float # Optional[float]
+    momentum_20d: float # Optional[float]
+    pe_ratio: float # Optional[float]
+    roe: float # Optional[float]
+    debt_to_equity: float # Optional[float]
     technical_score: float
     fundamental_score: float
     overall_score: float
@@ -98,8 +98,8 @@ class StockAnalysis:
     target_price_1: Optional[float] = None
     stop_loss_price: Optional[float] = None
     risk_reward_ratio: Optional[float] = None
-    risk_level: Optional[str] = None  # e.g., "Conservative", "Moderate", "Aggressive"
-    max_position_size_pct: Optional[float] = None # e.g., 0.02 for 2%
+    risk_level: Optional[str] = None
+    max_position_size_pct: Optional[float] = None
     trading_strategy_summary: Optional[str] = None
     time_horizon: Optional[str] = None
 
@@ -107,7 +107,7 @@ class StockAnalysis:
 class StockAnalyzer:
     def __init__(self):
         self.config = Config()
-        if pd and np and yf and requests and ta: # Check if all were imported
+        if pd and np and yf and requests and ta:
             logger.info("All major libraries loaded successfully.")
         else:
             logger.warning("One or more critical libraries failed to load. Functionality may be limited.")
@@ -125,9 +125,9 @@ class StockAnalyzer:
             'risk_reward_ratio': None,
             'risk_level': "Undefined",
             'max_position_size_pct': None,
-            'trading_strategy_summary': "Strategy not determined.", # Default summary
+            'trading_strategy_summary': "Strategy not determined.",
             'current_atr': None,
-            'time_horizon': None # Initialize time_horizon
+            'time_horizon': None
         }
 
         ticker = data.get('ticker', 'Unknown')
@@ -162,13 +162,13 @@ class StockAnalyzer:
             max_pos_pct = cfg_trading.AGGRESSIVE_MAX_POS_SIZE_PCT
         else:
             logger.info(f"Ticker '{ticker}': Breakout score {breakout_score_val:.1f} is below defined thresholds for a trade.")
-            trading_params['risk_level'] = risk_level_str # Will be "Undefined"
+            trading_params['risk_level'] = risk_level_str
             trading_params['trading_strategy_summary'] = f"No actionable trade setup: Breakout score {breakout_score_val:.1f} too low."
             return trading_params
 
         trading_params['risk_level'] = risk_level_str
         trading_params['max_position_size_pct'] = max_pos_pct
-        trading_params['time_horizon'] = cfg_trading.DEFAULT_TRADE_TIME_HORIZON # Assign time horizon for valid trades
+        trading_params['time_horizon'] = cfg_trading.DEFAULT_TRADE_TIME_HORIZON
 
         suggested_entry = current_price
         trading_params['suggested_entry_price'] = suggested_entry
@@ -182,7 +182,7 @@ class StockAnalyzer:
         sl_price = trading_params['stop_loss_price']
         tp_price = trading_params['target_price_1']
 
-        rr_ratio_val = None # Local variable for R/R
+        rr_ratio_val = None
         if suggested_entry is not None and isinstance(sl_price, (float, int)) and isinstance(tp_price, (float, int)):
             potential_reward = tp_price - suggested_entry
             potential_risk = suggested_entry - sl_price
@@ -192,8 +192,7 @@ class StockAnalyzer:
             else:
                 logger.warning(f"Ticker '{ticker}': Potential risk is zero or negative. R/R not calculated. Entry: {suggested_entry}, SL: {sl_price}")
 
-        # ATR Calculation
-        current_atr_val = None # Local variable for ATR
+        current_atr_val = None
         if ta and hist_data is not None and not hist_data.empty and \
            all(col in hist_data.columns for col in ['High', 'Low', 'Close']):
             try:
@@ -207,14 +206,13 @@ class StockAnalyzer:
                     calculated_atr = atr_indicator.average_true_range().iloc[-1]
                     if pd.notna(calculated_atr):
                          trading_params['current_atr'] = calculated_atr
-                         current_atr_val = calculated_atr # For summary string
+                         current_atr_val = calculated_atr
                          logger.debug(f"Ticker '{ticker}': Calculated ATR({cfg_trading.ATR_PERIOD}) = {current_atr_val:.2f}")
                 else:
                     logger.debug(f"Ticker '{ticker}': Not enough data for ATR({cfg_trading.ATR_PERIOD}) calculation.")
             except Exception as e_atr:
                 logger.error(f"Ticker '{ticker}': Error calculating ATR: {e_atr}", exc_info=True)
 
-        # Refined Trading Strategy Summary
         summary = f"Strategy: {risk_level_str}"
         if suggested_entry is not None: summary += f" | Entry: Market ~${suggested_entry:.2f} on breakout confirmation"
         if sl_price is not None: summary += f" | SL: ~${sl_price:.2f}"
@@ -222,8 +220,6 @@ class StockAnalyzer:
         if rr_ratio_val is not None: summary += f" | R/R: {rr_ratio_val:.2f}:1"
         if max_pos_pct is not None: summary += f" | Max Pos Size: {max_pos_pct:.0%}"
         if trading_params['time_horizon'] is not None: summary += f" | Horizon: {trading_params['time_horizon']}"
-        # Could add ATR to summary if desired:
-        # if current_atr_val is not None: summary += f" | ATR({cfg_trading.ATR_PERIOD}): {current_atr_val:.2f}"
 
         trading_params['trading_strategy_summary'] = summary
         logger.info(f"Ticker '{ticker}': Trading parameters. Summary: {summary}")
@@ -234,33 +230,30 @@ class StockAnalyzer:
         try:
             if not pd:
                 logger.error("Pandas is not available, cannot retrieve S&P 500 tickers. Using fallback list.")
-                return self.config.FALLBACK_TICKERS # Assuming FALLBACK_TICKERS is defined in Config
+                return self.config.FALLBACK_TICKERS
             url = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
-            tables = pd.read_html(url) # type: ignore
+            tables = pd.read_html(url)
             sp500_table = tables[0]
-            tickers = sp500_table['Symbol'].tolist() # type: ignore
+            tickers = sp500_table['Symbol'].tolist()
             tickers = [ticker.replace('.', '-') for ticker in tickers]
             logger.info(f"Retrieved {len(tickers)} S&P 500 tickers")
             return tickers
         except Exception as e:
             logger.error(f"Error retrieving S&P 500 list: {e}. Using fallback list.")
-            return self.config.FALLBACK_TICKERS # Assuming FALLBACK_TICKERS is defined in Config
-
+            return self.config.FALLBACK_TICKERS
 
     def get_stock_data(self, ticker: str) -> Optional[Dict]:
-        # Initial basic ticker validation
         if not ticker or not isinstance(ticker, str) or len(ticker.strip()) == 0:
             logger.warning(f"Invalid ticker format: Ticker is None, not a string, or empty. Value: '{ticker}'")
             return None
 
-        original_ticker = ticker # Keep original for some logging if needed
-        ticker = ticker.strip().upper() # Normalize
+        original_ticker = ticker
+        ticker = ticker.strip().upper()
 
-        if len(ticker) > 10: # Arbitrary reasonable max length for typical stock tickers
+        if len(ticker) > 10:
             logger.warning(f"Invalid ticker format: Ticker '{ticker}' (Original: '{original_ticker}') seems too long.")
             return None
 
-        # Check for required libraries after basic ticker validation
         if not yf:
             logger.error(f"yfinance library is not available. Cannot get data for ticker '{ticker}'.")
             return None
@@ -280,102 +273,91 @@ class StockAnalyzer:
         for attempt in range(self.config.RETRY_ATTEMPTS):
             try:
                 stock = yf.Ticker(ticker)
-                # Accessing .info can itself be a network call or raise issues
                 info = stock.info
 
-                # Check if info is populated sufficiently
-                # Using 'currency' or 'financialCurrency' as another check for a valid company object from yfinance
                 if not info or info.get('regularMarketPrice') is None or info.get('financialCurrency') is None :
                     logger.warning(f"Ticker '{ticker}': No valid detailed info (e.g., market price, currency) found on attempt {attempt + 1}/{self.config.RETRY_ATTEMPTS}. Ticker might be delisted, invalid, or not a standard stock type.")
-                    if attempt == self.config.RETRY_ATTEMPTS - 1: # Last attempt
+                    if attempt == self.config.RETRY_ATTEMPTS - 1:
                         logger.error(f"Ticker '{ticker}': Failed to get valid detailed info after {self.config.RETRY_ATTEMPTS} attempts. Aborting for this ticker.")
-                        return None # Give up on this ticker if info is consistently bad
+                        return None
 
-                hist = stock.history(period="3mo", timeout=self.config.API_TIMEOUT) # type: ignore
+                hist = stock.history(period="3mo", timeout=self.config.API_TIMEOUT)
 
                 if hist is not None and not hist.empty:
                     if len(hist) >= self.config.MIN_DATA_POINTS:
                         logger.info(f"Ticker '{ticker}': Successfully fetched history data on attempt {attempt + 1}.")
-                        break  # Success
-                    else: # History fetched but not enough data points
+                        break
+                    else:
                         logger.warning(f"Ticker '{ticker}': Insufficient data points ({len(hist)}) on attempt {attempt + 1}/{self.config.RETRY_ATTEMPTS}. Need {self.config.MIN_DATA_POINTS}.")
-                        # This will fall through to the final check after the loop.
-                else: # History is None or empty
+                else:
                     logger.warning(f"Ticker '{ticker}': No history data returned on attempt {attempt + 1}/{self.config.RETRY_ATTEMPTS}.")
 
-                if attempt < self.config.RETRY_ATTEMPTS - 1: # Don't sleep on the last attempt
+                if attempt < self.config.RETRY_ATTEMPTS - 1:
                     logger.info(f"Ticker '{ticker}': Retrying...")
-                    time.sleep(self.config.RETRY_DELAY_SECONDS) # Use a configurable delay
+                    time.sleep(self.config.RETRY_DELAY_SECONDS)
 
-            except Exception as e: # Catching a broader exception during yf.Ticker or stock.history
+            except Exception as e:
                 last_exception = e
                 logger.warning(f"Ticker '{ticker}': Error during data fetching (attempt {attempt + 1}/{self.config.RETRY_ATTEMPTS}): {e}. Retrying...")
                 if attempt < self.config.RETRY_ATTEMPTS - 1:
                     time.sleep(self.config.RETRY_DELAY_SECONDS)
 
-        # Post-loop checks
         if hist is None or hist.empty or len(hist) < self.config.MIN_DATA_POINTS:
             logger.error(f"Ticker '{ticker}': Failed to fetch sufficient history after {self.config.RETRY_ATTEMPTS} attempts. Min points: {self.config.MIN_DATA_POINTS}, Got: {len(hist) if hist is not None else 0}. Last error: {last_exception}")
             return None
 
-        # Ensure info was successfully fetched and is still considered valid
         if not info or info.get('regularMarketPrice') is None or info.get('financialCurrency') is None:
              logger.error(f"Ticker '{ticker}': Valid detailed info could not be confirmed even if history was available. Cannot proceed.")
              return None
 
         try:
-            # Safe data access
             if 'Close' not in hist.columns or hist['Close'].empty:
                 logger.warning(f"Ticker '{ticker}': No 'Close' price data in history.")
                 return None
             
-            current_price = hist['Close'].iloc[-1] # type: ignore
+            current_price = hist['Close'].iloc[-1]
 
-            # Ensure enough data for rolling calculations
             min_len_for_sma20 = 20
             min_len_for_sma50 = 50
-            min_len_for_rsi = 15 # 14 periods + 1 for diff
+            min_len_for_rsi = 15
             min_len_for_momentum = 21
 
             sma_20 = hist['Close'].rolling(window=min_len_for_sma20).mean().iloc[-1] if len(hist['Close']) >= min_len_for_sma20 else None
-            sma_50 = hist['Close'].rolling(window=min_len_for_sma50).mean().iloc[-1] if len(hist['Close']) >= min_len_for_sma50 else (sma_20 if sma_20 is not None else None) # Fallback to sma_20 or None
+            sma_50 = hist['Close'].rolling(window=min_len_for_sma50).mean().iloc[-1] if len(hist['Close']) >= min_len_for_sma50 else (sma_20 if sma_20 is not None else None)
 
-            rsi = None
+            rsi_val = None # Renamed from rsi to avoid conflict with the rsi_series variable later
             if len(hist['Close']) >= min_len_for_rsi:
                 delta = hist['Close'].diff()
                 gain = (delta.where(delta > 0, 0.0)).rolling(window=14).mean().iloc[-1]
                 loss = (-delta.where(delta < 0, 0.0)).rolling(window=14).mean().iloc[-1]
 
-                if np and (np.isnan(gain) or np.isnan(loss)): # Should not happen if hist['Close'] is clean
-                    rsi = np.nan # Or None
+                if np and (np.isnan(gain) or np.isnan(loss)):
+                    rsi_val = np.nan
                 elif loss == 0:
-                    if gain == 0: # No change in price over the period
-                        rsi = 50.0  # Neutral RSI
-                    else: # All gain, no loss
-                        rsi = 100.0
-                elif gain == 0: # All loss, no gain
-                    rsi = 0.0
-                else:
-                    rs = gain / loss
-                    if np and (np.isnan(rs) or np.isinf(rs)):
-                        rsi = np.nan # Or None, if rs is problematic
+                    if gain == 0:
+                        rsi_val = 50.0
                     else:
-                        rsi = 100.0 - (100.0 / (1.0 + rs))
-            else: # Not enough data for RSI
-                rsi = None # Or np.nan if preferred for consistency in numeric arrays
+                        rsi_val = 100.0
+                elif gain == 0:
+                    rsi_val = 0.0
+                else:
+                    rs_val = gain / loss # Renamed from rs
+                    if np and (np.isnan(rs_val) or np.isinf(rs_val)):
+                        rsi_val = np.nan
+                    else:
+                        rsi_val = 100.0 - (100.0 / (1.0 + rs_val))
+            else:
+                rsi_val = None
 
             momentum_20d = ((current_price / hist['Close'].iloc[-min_len_for_momentum]) - 1) * 100 if len(hist['Close']) >= min_len_for_momentum and current_price is not None else None
 
-            # Convert np.nan to None for JSON compatibility and consistent handling, if np was used for rsi
-            if np and isinstance(rsi, float) and np.isnan(rsi):
-                rsi = None
+            if np and isinstance(rsi_val, float) and np.isnan(rsi_val):
+                rsi_val = None
 
-            # Check if any essential calculated values are None (current_price and rsi are most critical for this check)
-            if current_price is None or rsi is None: # type: ignore
-                 logger.error(f"Ticker '{ticker}': Critical indicators (current price or RSI) are None. current_price: {current_price}, rsi: {rsi}. Cannot proceed with this stock.") # type: ignore
+            if current_price is None or rsi_val is None:
+                 logger.error(f"Ticker '{ticker}': Critical indicators (current price or RSI) are None. current_price: {current_price}, rsi: {rsi_val}. Cannot proceed with this stock.")
                  return None
 
-            # Initialize all new signal values
             is_volume_breakout = False
             volume_ratio = None
             sma_20_50_crossed_bullish = None
@@ -387,33 +369,26 @@ class StockAnalyzer:
             bb_upper = None
             bb_lower = None
             bb_ma = None
-            # N-day High/Low breakout signals
-            breakout_n_day_high_signal = None # Renamed to avoid conflict with dict key
-            breakdown_n_day_low_signal = None # Renamed
-            n_day_high_value = None           # Renamed
-            n_day_low_value = None            # Renamed
-            # MACD Crossover and RSI Recovery
+            breakout_n_day_high_signal = None
+            breakdown_n_day_low_signal = None
+            n_day_high_value = None
+            n_day_low_value = None
             macd_bullish_crossover = None
             macd_bearish_crossover = None
             rsi_recovered_from_oversold = None
             current_macd_line = None
             current_macd_signal = None
 
-
-            # SMA200 Calculation
             sma_200 = None
             min_len_for_sma200 = self.config.TechnicalThresholds.SMA_LONG
             if len(hist['Close']) >= min_len_for_sma200:
-                sma_200_series = hist['Close'].rolling(window=min_len_for_sma200, min_periods=max(1, min_len_for_sma200 // 2)).mean()
-                if not sma_200_series.empty:
-                    sma_200 = sma_200_series.iloc[-1] # Get the last value
+                sma_200_series_val = hist['Close'].rolling(window=min_len_for_sma200, min_periods=max(1, min_len_for_sma200 // 2)).mean() # Renamed
+                if not sma_200_series_val.empty:
+                    sma_200 = sma_200_series_val.iloc[-1]
             else:
                 logger.debug(f"Ticker '{ticker}': Not enough data points ({len(hist['Close'])}) for SMA200 calculation (period: {min_len_for_sma200}).")
 
-            # MA Crossover Detections
-            # Ensure we have at least 2 data points for SMAs to detect a crossover from previous to current
-            if len(hist['Close']) >= 2: # General check for iloc[-2] access
-                # Helper function for crossover detection
+            if len(hist['Close']) >= 2:
                 def get_sma_series(window, min_p):
                     if len(hist['Close']) >= window:
                         return hist['Close'].rolling(window=window, min_periods=min_p).mean()
@@ -422,7 +397,6 @@ class StockAnalyzer:
                 sma_20_series = get_sma_series(self.config.TechnicalThresholds.SMA_SHORT, max(1, self.config.TechnicalThresholds.SMA_SHORT // 2))
                 sma_50_series = get_sma_series(self.config.TechnicalThresholds.SMA_MEDIUM, max(1, self.config.TechnicalThresholds.SMA_MEDIUM // 2))
                 sma_200_series_for_crossover = get_sma_series(self.config.TechnicalThresholds.SMA_LONG, max(1, self.config.TechnicalThresholds.SMA_LONG//2))
-
 
                 if sma_20_series is not None and sma_50_series is not None and len(sma_20_series) >=2 and len(sma_50_series) >=2:
                     if pd.notna(sma_20_series.iloc[-1]) and pd.notna(sma_50_series.iloc[-1]) and \
@@ -440,8 +414,7 @@ class StockAnalyzer:
                         sma_50_200_crossed_bearish = sma_50_series.iloc[-1] < sma_200_series_for_crossover.iloc[-1] and \
                                                      sma_50_series.iloc[-2] >= sma_200_series_for_crossover.iloc[-2]
 
-            # Bollinger Bands Calculation
-            if ta: # Check if 'ta' library was imported successfully
+            if ta:
                 bb_config = self.config.BreakoutTechnicalThresholds
                 if len(hist['Close']) >= bb_config.BB_WINDOW:
                     try:
@@ -458,7 +431,7 @@ class StockAnalyzer:
                             if pd.notna(current_price) and pd.notna(bb_upper):
                                 bb_breakout_upper = current_price > bb_upper
 
-                            if pd.notna(bb_upper) and pd.notna(bb_lower) and pd.notna(bb_ma) and bb_ma > 0: # bb_ma > 0 for squeeze calc
+                            if pd.notna(bb_upper) and pd.notna(bb_lower) and pd.notna(bb_ma) and bb_ma > 0:
                                 bb_squeeze = (bb_upper - bb_lower) < (bb_ma * bb_config.BB_SQUEEZE_STD_THRESHOLD)
                             else:
                                 logger.debug(f"Ticker '{ticker}': BB values NaN, cannot calculate squeeze. MA:{bb_ma} Upper:{bb_upper} Lower:{bb_lower}")
@@ -471,16 +444,13 @@ class StockAnalyzer:
             else:
                 logger.warning(f"Ticker '{ticker}': Technical Analysis (ta) library not available. Skipping Bollinger Band calculations.")
 
-            # N-day High/Low Breakout Calculation
-            n_period_high_low = self.config.TechnicalThresholds.SMA_MEDIUM # Using 50-day period for N-day H/L
+            n_period_high_low = self.config.TechnicalThresholds.SMA_MEDIUM
 
             if 'High' not in hist.columns or 'Low' not in hist.columns or hist['High'].empty or hist['Low'].empty:
                 logger.warning(f"Ticker '{ticker}': 'High' or 'Low' columns not found or empty. Skipping N-day High/Low breakout.")
-            elif len(hist['Close']) < n_period_high_low: # Need enough data for the N-day period
+            elif len(hist['Close']) < n_period_high_low:
                 logger.debug(f"Ticker '{ticker}': Not enough data points ({len(hist['Close'])}) for N-day High/Low (period: {n_period_high_low}).")
             else:
-                # Calculate N-day high, excluding the current day's high for breakout context (compare current close to past N-day high)
-                # So, use .iloc[:-1] to get all rows except the last, then roll.
                 n_day_high_value = hist['High'].iloc[:-1].rolling(window=n_period_high_low, min_periods=max(1, n_period_high_low // 2)).max().iloc[-1]
                 n_day_low_value = hist['Low'].iloc[:-1].rolling(window=n_period_high_low, min_periods=max(1, n_period_high_low // 2)).min().iloc[-1]
 
@@ -489,23 +459,21 @@ class StockAnalyzer:
                         breakout_n_day_high_signal = True
                         logger.info(f"Ticker '{ticker}': Price broke above {n_period_high_low}-day high of {n_day_high_value:.2f}")
                     else:
-                        breakout_n_day_high_signal = False # Explicitly false if not a breakout
+                        breakout_n_day_high_signal = False
 
                 if pd.notna(current_price) and pd.notna(n_day_low_value):
                     if current_price < n_day_low_value:
                         breakdown_n_day_low_signal = True
                         logger.info(f"Ticker '{ticker}': Price broke below {n_period_high_low}-day low of {n_day_low_value:.2f}")
                     else:
-                        breakdown_n_day_low_signal = False # Explicitly false
+                        breakdown_n_day_low_signal = False
 
-            # Ensure n_day_high_value and n_day_low_value are None if not calculated, for dict consistency
-            if 'n_day_high_value' in locals() and pd.isna(n_day_high_value): n_day_high_value = None # Should be assigned None if not calculable
-            if 'n_day_low_value' in locals() and pd.isna(n_day_low_value): n_day_low_value = None   # Should be assigned None if not calculable
+            if 'n_day_high_value' in locals() and pd.isna(n_day_high_value): n_day_high_value = None
+            if 'n_day_low_value' in locals() and pd.isna(n_day_low_value): n_day_low_value = None
 
-            # MACD Calculation and Crossover Detection
             if ta:
                 macd_cfg = self.config.BreakoutTechnicalThresholds
-                min_len_for_macd = macd_cfg.MACD_SLOW_PERIOD + macd_cfg.MACD_SIGNAL_PERIOD # Approximate min length
+                min_len_for_macd = macd_cfg.MACD_SLOW_PERIOD + macd_cfg.MACD_SIGNAL_PERIOD
                 if len(hist['Close']) >= min_len_for_macd:
                     try:
                         macd_indicator = ta.trend.MACD(close=hist['Close'],
@@ -535,60 +503,32 @@ class StockAnalyzer:
             else:
                 logger.warning(f"Ticker '{ticker}': Technical Analysis (ta) library not available. Skipping MACD calculations.")
 
-            # RSI Recovery from Oversold Detection
-            # The existing `rsi` variable holds the latest RSI value. We need a series for recovery detection.
             if ta:
-                # Standard RSI period is 14, already used for the single `rsi` value.
-                # Let's ensure we have enough data for a small lookback for the recovery check.
-                # The existing `rsi` is iloc[-1] of a 14-period rolling calculation on diffs.
-                # For recovery, we need to see if it *was* oversold recently.
-                # The current `rsi` value calculation is manual. For simplicity & consistency, let's use ta.momentum.RSIIndicator
-                # if we need the series. The existing `rsi` is fine if we only check current rsi vs previous rsi.
-                # However, the prompt asks for "any(rsi_series.iloc[-5:-1] < self.config.TechnicalThresholds.RSI_OVERSOLD))"
-                # This implies needing an RSI series.
-
-                rsi_cfg_recovery_lookback = 5 # How many previous periods to check for oversold state
-                min_len_for_rsi_series = 14 + rsi_cfg_recovery_lookback # RSI period + lookback
+                rsi_cfg_recovery_lookback = 5
+                min_len_for_rsi_series = 14 + rsi_cfg_recovery_lookback
 
                 if len(hist['Close']) >= min_len_for_rsi_series:
                     try:
-                        rsi_indicator_series_calc = ta.momentum.RSIIndicator(close=hist['Close'], window=14) # Default RSI window
-                        rsi_series = rsi_indicator_series_calc.rsi()
+                        rsi_indicator_series_calc = ta.momentum.RSIIndicator(close=hist['Close'], window=14)
+                        rsi_series_val = rsi_indicator_series_calc.rsi() # Renamed
 
-                        if not rsi_series.empty and len(rsi_series) >= rsi_cfg_recovery_lookback : # Need at least lookback period entries
-                            current_rsi_value_for_recovery = rsi_series.iloc[-1] # This should be very close to 'rsi' var
+                        if not rsi_series_val.empty and len(rsi_series_val) >= rsi_cfg_recovery_lookback :
+                            current_rsi_value_for_recovery = rsi_series_val.iloc[-1]
 
-                            # Check if RSI was oversold in the recent past (e.g., previous 1 to 4 days)
-                            # and is now above the recovery confirmation level.
-                            # iloc[-5:-1] means indices from (length-5) up to (length-2), so -2, -3, -4, -5 relative to end.
-                            # Ensure indices are valid if series is short, though len check above should help.
-                            # A simple check: current > recovery_confirmation and previous <= oversold_threshold
-                            # previous_rsi_value = rsi_series.iloc[-2]
-                            # rsi_recovered_from_oversold = (pd.notna(current_rsi_value_for_recovery) and pd.notna(previous_rsi_value) and
-                            #                               current_rsi_value_for_recovery > self.config.BreakoutTechnicalThresholds.RSI_RECOVERY_CONFIRMATION and
-                            #                               previous_rsi_value <= self.config.TechnicalThresholds.RSI_OVERSOLD)
-
-                            # Using the "any in last X days" logic from prompt:
                             if pd.notna(current_rsi_value_for_recovery):
                                 if current_rsi_value_for_recovery > self.config.BreakoutTechnicalThresholds.RSI_RECOVERY_CONFIRMATION:
-                                    # Ensure the slice [-rsi_cfg_recovery_lookback:-1] is valid
-                                    # Check if any of the values in the slice (from index -lookback up to -2) were oversold
-                                    # e.g., for lookback 5: indices -5, -4, -3, -2
-                                    # Make sure series has enough points for this slice. len(rsi_series) must be >= lookback
-                                    if len(rsi_series) > rsi_cfg_recovery_lookback: # e.g. if lookback is 5, need at least 6 items for series[-1] and series[-lookback-1] which is series[-6]
-                                         # Correct slice would be from -(lookback_window + 1) up to -2 (exclusive of -1 which is current)
-                                         # e.g., for lookback 5, check from hist.iloc[-6] to hist.iloc[-2]
-                                        past_rsi_slice = rsi_series.iloc[-(rsi_cfg_recovery_lookback +1) : -1]
+                                    if len(rsi_series_val) > rsi_cfg_recovery_lookback:
+                                        past_rsi_slice = rsi_series_val.iloc[-(rsi_cfg_recovery_lookback +1) : -1]
                                         if not past_rsi_slice.empty and any(past_rsi_slice < self.config.TechnicalThresholds.RSI_OVERSOLD):
                                             rsi_recovered_from_oversold = True
                                         else:
-                                            rsi_recovered_from_oversold = False # Not recovered or wasn't oversold
-                                    else: # Not enough historical RSI points for the lookback window.
-                                        rsi_recovered_from_oversold = False # Cannot confirm recovery
+                                            rsi_recovered_from_oversold = False
+                                    else:
+                                        rsi_recovered_from_oversold = False
                                 else:
-                                    rsi_recovered_from_oversold = False # Not above recovery threshold
+                                    rsi_recovered_from_oversold = False
                             else:
-                                rsi_recovered_from_oversold = False # Current RSI is NaN
+                                rsi_recovered_from_oversold = False
                         else:
                              logger.debug(f"Ticker '{ticker}': RSI series too short or empty for recovery detection.")
                              rsi_recovered_from_oversold = False
@@ -597,32 +537,27 @@ class StockAnalyzer:
                         rsi_recovered_from_oversold = False
                 else:
                     logger.debug(f"Ticker '{ticker}': Not enough data points ({len(hist['Close'])}) for RSI Recovery (needs approx {min_len_for_rsi_series}).")
-                    rsi_recovered_from_oversold = False # Default if not enough data
+                    rsi_recovered_from_oversold = False
             else:
                 logger.warning(f"Ticker '{ticker}': Technical Analysis (ta) library not available. Skipping RSI Recovery calculations.")
                 rsi_recovered_from_oversold = False
 
-
-            # Volume Breakout Calculation (existing code from previous step)
             if 'Volume' not in hist.columns or hist['Volume'].empty:
                 logger.warning(f"Ticker '{ticker}': 'Volume' column not found in history or is empty. Skipping volume breakout calculation.")
             else:
                 vol_avg_period = self.config.BreakoutTechnicalThresholds.VOLUME_AVG_PERIOD
-                # Ensure min_periods is at least 1 and not more than the window itself.
                 min_periods_vol = max(1, min(vol_avg_period // 2, vol_avg_period))
 
-                if len(hist['Volume']) >= min_periods_vol: # Check if there's enough data for a meaningful average
+                if len(hist['Volume']) >= min_periods_vol:
                     avg_volume = hist['Volume'].rolling(window=vol_avg_period, min_periods=min_periods_vol).mean().iloc[-1]
-                    current_volume = hist['Volume'].iloc[-1]
+                    current_volume_val = hist['Volume'].iloc[-1] # Renamed
 
                     if pd.isna(avg_volume) or avg_volume == 0:
                         logger.warning(f"Ticker '{ticker}': Average volume is NaN or zero (avg_volume: {avg_volume}). Volume ratio cannot be calculated.")
-                        # volume_ratio remains None
-                    elif pd.isna(current_volume):
+                    elif pd.isna(current_volume_val):
                         logger.warning(f"Ticker '{ticker}': Current volume is NaN. Volume ratio cannot be calculated.")
-                        # volume_ratio remains None
                     else:
-                        volume_ratio = current_volume / avg_volume
+                        volume_ratio = current_volume_val / avg_volume
                         if volume_ratio >= self.config.BreakoutTechnicalThresholds.VOLUME_SURGE_MULTIPLIER:
                             is_volume_breakout = True
                             logger.info(f"Ticker '{ticker}': Volume breakout detected! Ratio: {volume_ratio:.2f}")
@@ -631,45 +566,37 @@ class StockAnalyzer:
                 else:
                     logger.warning(f"Ticker '{ticker}': Not enough data points ({len(hist['Volume'])}) for average volume calculation (period: {vol_avg_period}, min_periods: {min_periods_vol}).")
 
-
             return_dict = {
-                'ticker': ticker, # Normalized ticker
-                'company_name': info.get('longName', original_ticker), # Use original ticker for company name if longName is missing
+                'ticker': ticker,
+                'company_name': info.get('longName', original_ticker),
                 'current_price': current_price,
                 'sector': info.get('sector', 'Unknown'),
                 'market_cap': info.get('marketCap', 0),
-                # Use current_volume if calculated, otherwise default from hist (which might be 0 if column missing)
-                'volume': current_volume if 'current_volume' in locals() and pd.notna(current_volume) else (hist['Volume'].iloc[-1] if 'Volume' in hist.columns and not hist['Volume'].empty else 0),
-                'rsi': rsi,
+                'volume': current_volume_val if 'current_volume_val' in locals() and pd.notna(current_volume_val) else (hist['Volume'].iloc[-1] if 'Volume' in hist.columns and not hist['Volume'].empty else 0),
+                'rsi': rsi_val, # Use the renamed rsi_val
                 'sma_20': sma_20,
-                'sma_50': sma_50 if sma_50 is not None else sma_20, # Fallback sma_50 to sma_20 if it was not calculable
+                'sma_50': sma_50 if sma_50 is not None else sma_20,
                 'momentum_20d': momentum_20d,
-                'pe_ratio': info.get('trailingPE'), # Allow None for PE
-                'roe': info.get('returnOnEquity'), # Allow None
-                'debt_to_equity': info.get('debtToEquity'), # Allow None
-                'profit_margin': info.get('profitMargins'), # Allow None
-                # New breakout fields
+                'pe_ratio': info.get('trailingPE'),
+                'roe': info.get('returnOnEquity'),
+                'debt_to_equity': info.get('debtToEquity'),
+                'profit_margin': info.get('profitMargins'),
                 'is_volume_breakout': is_volume_breakout,
                 'volume_ratio': volume_ratio,
-                # MA Crossover signals
                 'sma_20_50_crossed_bullish': sma_20_50_crossed_bullish,
                 'sma_50_200_crossed_bullish': sma_50_200_crossed_bullish,
                 'sma_20_50_crossed_bearish': sma_20_50_crossed_bearish,
                 'sma_50_200_crossed_bearish': sma_50_200_crossed_bearish,
-                # Bollinger Band signals
                 'bb_breakout_upper': bb_breakout_upper,
                 'bb_squeeze': bb_squeeze,
                 'bb_upper': bb_upper,
                 'bb_lower': bb_lower,
                 'bb_ma': bb_ma,
-                # Store SMA200 for potential use in scoring or other signals
                 'sma_200': sma_200 if pd.notna(sma_200) else None,
-                # N-day High/Low breakout signals
                 'breakout_n_day_high': breakout_n_day_high_signal,
                 'breakdown_n_day_low': breakdown_n_day_low_signal,
                 'n_day_high': n_day_high_value,
                 'n_day_low': n_day_low_value,
-                # MACD and RSI Recovery
                 'macd_bullish_crossover': macd_bullish_crossover,
                 'macd_bearish_crossover': macd_bearish_crossover,
                 'rsi_recovered_from_oversold': rsi_recovered_from_oversold,
@@ -756,27 +683,15 @@ class StockAnalyzer:
             reasons.append("Momentum (20d): N/A or invalid")
             logger.debug(f"Momentum data not available or invalid for {ticker}")
         
-        # Ensure current_price is valid before final score adjustment based on it.
-        # This part of original code was problematic as it assumed all indicators were valid.
-        # The previous block `if None in [current_price, rsi, sma_20, sma_50, momentum]:`
-        # would return 0.0, which is not ideal if only one indicator is missing.
-        # The new approach scores based on available data.
-        # The initial check `if not data:` handles the case of no data at all.
-        # If current_price itself is None, most other things would be too, or calculations would be skewed.
         if not is_valid_indicator(current_price):
             logger.warning(f"Current price is None or NaN for {ticker}. Technical score might be unreliable or zero.")
-            # Depending on strictness, could return 0 here.
-            # For now, allow score to be based on other valid indicators.
-            # If no indicators were valid, score would remain 50 (neutral).
-            # If strict, and current_price is mandatory:
-            # return 0.0, ["Current price is N/A, cannot calculate technical score"]
         
         return max(0, min(100, score)), reasons
 
     def calculate_breakout_score(self, data: Dict) -> Tuple[Optional[float], List[str]]:
-        score = 0.0  # Initialize to 0, as it's an additive score based on positive signals
+        score = 0.0
         reasons = []
-        ticker = data.get('ticker', 'Unknown') # For logging
+        ticker = data.get('ticker', 'Unknown')
 
         if not data:
             logger.warning(f"Ticker '{ticker}': No data provided for breakout scoring.")
@@ -784,7 +699,6 @@ class StockAnalyzer:
 
         weights = self.config.BreakoutScoringWeights
 
-        # Helper to safely get boolean signals, defaulting to False if None or key missing
         def get_signal(key: str) -> bool:
             val = data.get(key)
             return val if isinstance(val, bool) else False
@@ -804,20 +718,19 @@ class StockAnalyzer:
             logger.debug(f"Ticker '{ticker}': +{weights.VOLUME_BREAKOUT_WEIGHT*100} for volume breakout.")
 
         if breakout_n_day_high:
-            n_day_high_period = self.config.TechnicalThresholds.SMA_MEDIUM # Assuming this was the period used
+            n_day_high_period = self.config.TechnicalThresholds.SMA_MEDIUM
             score += weights.PRICE_BREAKOUT_S_R_WEIGHT * 100
             reasons.append(f"Price broke {n_day_high_period}-day high ({data.get('n_day_high', 0.0):.2f})")
             logger.debug(f"Ticker '{ticker}': +{weights.PRICE_BREAKOUT_S_R_WEIGHT*100} for N-day high breakout.")
 
-        # MA Crossovers - prioritize stronger one
         ma_crossover_scored = False
         if sma_50_200_crossed_bullish:
             score += weights.MA_CROSSOVER_WEIGHT * 100
             reasons.append("Bullish MA Crossover (SMA50 > SMA200)")
             logger.debug(f"Ticker '{ticker}': +{weights.MA_CROSSOVER_WEIGHT*100} for SMA50/200 crossover.")
             ma_crossover_scored = True
-        elif sma_20_50_crossed_bullish and not ma_crossover_scored: # Only score if the stronger one hasn't occurred
-            score += weights.MA_CROSSOVER_WEIGHT * 0.75 * 100 # Apply a factor for the less strong signal
+        elif sma_20_50_crossed_bullish and not ma_crossover_scored:
+            score += weights.MA_CROSSOVER_WEIGHT * 0.75 * 100
             reasons.append("Bullish MA Crossover (SMA20 > SMA50)")
             logger.debug(f"Ticker '{ticker}': +{weights.MA_CROSSOVER_WEIGHT*0.75*100} for SMA20/50 crossover.")
 
@@ -830,13 +743,11 @@ class StockAnalyzer:
             score += weights.BB_SQUEEZE_WEIGHT * 100
             reasons.append("Bollinger Bands Squeeze (potential energy)")
             logger.debug(f"Ticker '{ticker}': +{weights.BB_SQUEEZE_WEIGHT*100} for BB squeeze.")
-            # Bonus for breakout from squeeze
             if bb_breakout_upper:
-                bonus_squeeze_breakout = 0.05 * 100 # Example bonus: 5 points
+                bonus_squeeze_breakout = 0.05 * 100
                 score += bonus_squeeze_breakout
                 reasons.append("Bonus: Breakout from BB Squeeze")
                 logger.debug(f"Ticker '{ticker}': +{bonus_squeeze_breakout} bonus for BB squeeze breakout.")
-
 
         if macd_bullish_crossover:
             score += weights.MACD_CROSSOVER_WEIGHT * 100
@@ -848,9 +759,9 @@ class StockAnalyzer:
             reasons.append(f"RSI recovered from oversold (RSI: {data.get('rsi', 0.0):.1f})")
             logger.debug(f"Ticker '{ticker}': +{weights.RSI_RECOVERY_WEIGHT*100} for RSI recovery.")
 
-        if not reasons: # No breakout signals triggered
+        if not reasons:
             logger.info(f"Ticker '{ticker}': No breakout signals detected for breakout score.")
-            return 0.0, ["No specific breakout signals detected."] # Return 0 score and a neutral reason
+            return 0.0, ["No specific breakout signals detected."]
 
         return max(0, min(100, score)), reasons
     
@@ -859,21 +770,30 @@ class StockAnalyzer:
         reasons = []
 
         if not data:
-            return 0, ["Input data is missing for fundamental score"]
+            return 0.0, ["Input data is missing for fundamental score"] # Return float for consistency
         
         pe_ratio = data.get('pe_ratio')
         roe = data.get('roe')
         debt_to_equity = data.get('debt_to_equity')
 
-        if None in [pe_ratio, roe, debt_to_equity]:
-            logger.warning(f"Missing one or more data points for fundamental score calculation for {data.get('ticker', 'Unknown')}.")
-            reasons.append("Missing critical data for fundamental scoring")
-            return 0.0, reasons # Or 50.0 if neutral is preferred
-        
-        if 0 < pe_ratio < self.config.FundamentalThresholds.PE_EXCELLENT_MAX: # type: ignore
+        # Ensure fundamental metrics are valid numbers before using them
+        valid_pe = isinstance(pe_ratio, (int, float)) and not (np and np.isnan(pe_ratio)) if pe_ratio is not None else False
+        valid_roe = isinstance(roe, (int, float)) and not (np and np.isnan(roe)) if roe is not None else False
+        valid_dte = isinstance(debt_to_equity, (int, float)) and not (np and np.isnan(debt_to_equity)) if debt_to_equity is not None else False
+
+        if not (valid_pe and valid_roe and valid_dte):
+            missing_metrics = []
+            if not valid_pe: missing_metrics.append("P/E")
+            if not valid_roe: missing_metrics.append("ROE")
+            if not valid_dte: missing_metrics.append("D/E")
+            logger.warning(f"Ticker '{data.get('ticker', 'Unknown')}': Missing or invalid fundamental metrics for scoring: {', '.join(missing_metrics)}.")
+            reasons.append(f"Missing fundamental data: {', '.join(missing_metrics)}")
+            return 0.0, reasons # Return 0 if critical fundamental data is missing
+
+        if 0 < pe_ratio < self.config.FundamentalThresholds.PE_EXCELLENT_MAX:
             score += 15
-            reasons.append(f"Excellent P/E ratio ({pe_ratio:.1f})") # type: ignore
-        elif pe_ratio > self.config.FundamentalThresholds.PE_POOR_MIN: # type: ignore
+            reasons.append(f"Excellent P/E ratio ({pe_ratio:.1f})")
+        elif pe_ratio > self.config.FundamentalThresholds.PE_POOR_MIN:
             score -= 10
             reasons.append(f"High P/E ratio ({pe_ratio:.1f})")
         
@@ -895,65 +815,79 @@ class StockAnalyzer:
             reasons.append("High debt levels")
         
         return max(0, min(100, score)), reasons
-      def analyze_stock(self, ticker: str) -> Optional[StockAnalysis]:
-        # Note: ticker here is the original, un-normalized ticker from the input list
+
+    def analyze_stock(self, ticker: str) -> Optional[StockAnalysis]:
         logger.info(f"Starting analysis for ticker: '{ticker}'...")
         try:
-            data = self.get_stock_data(ticker) # get_stock_data will normalize it
+            data = self.get_stock_data(ticker)
             if not data:
-                # get_stock_data already logs detailed reasons for failure.
-                # Add a specific message for skipping analysis.
                 logger.warning(f"Analysis skipped for ticker '{ticker}': No data obtained or ticker invalid.")
                 return None
             
-            # data['ticker'] will be the normalized ticker
             normalized_ticker = data['ticker']
             logger.info(f"Data obtained for '{normalized_ticker}'. Calculating scores...")
             technical_score, technical_reasons = self.calculate_technical_score(data)
             fundamental_score, fundamental_reasons = self.calculate_fundamental_score(data)
             breakout_score, breakout_reasons = self.calculate_breakout_score(data)
             
-            # Retrieve hist_data_df from data dictionary to pass to calculate_trading_parameters
             hist_df_for_trading_params = data.get('hist_data_df')
             trading_parameters = self.calculate_trading_parameters(data, hist_df_for_trading_params)
 
-
-            overall_score = ( # Current overall_score remains unchanged, breakout_score is separate
+            overall_score = (
                 technical_score * self.config.ScoringWeights.TECHNICAL_WEIGHT +
                 fundamental_score * self.config.ScoringWeights.FUNDAMENTAL_WEIGHT +
                 50 * self.config.ScoringWeights.SENTIMENT_WEIGHT
             )
             
+            recommendation = "HOLD" # Default
+            confidence = 0.5
             if overall_score >= self.config.ScoringWeights.STRONG_BUY_THRESHOLD:
                 recommendation = "STRONG_BUY"
                 confidence = 0.9
             elif overall_score >= self.config.ScoringWeights.BUY_THRESHOLD:
                 recommendation = "BUY"
                 confidence = 0.7
-            elif overall_score >= self.config.ScoringWeights.HOLD_THRESHOLD:
-                recommendation = "HOLD"
-                confidence = 0.5
-            elif overall_score >= self.config.ScoringWeights.SELL_THRESHOLD:
+            elif overall_score <= self.config.ScoringWeights.SELL_THRESHOLD: # Adjusted to make HOLD the default
                 recommendation = "SELL"
                 confidence = 0.7
-            else:
-                recommendation = "STRONG_SELL"
-                confidence = 0.9
-            
+            # This implies overall_score between SELL_THRESHOLD and HOLD_THRESHOLD (e.g. 25-40) will also be SELL
+            # And scores below STRONG_SELL_THRESHOLD (implicitly anything below SELL_THRESHOLD if not defined)
+            # To make HOLD the default for scores between SELL and BUY:
+            # elif overall_score < self.config.ScoringWeights.BUY_THRESHOLD and overall_score > self.config.ScoringWeights.SELL_THRESHOLD:
+            #    recommendation = "HOLD"
+            #    confidence = 0.5
+            # For now, sticking to the provided logic which prioritizes defined thresholds.
+            # A specific STRONG_SELL threshold might be useful if differentiating from SELL.
+            # The original logic for STRONG_SELL was:
+            # else: recommendation = "STRONG_SELL"; confidence = 0.9
+            # This means any score below SELL_THRESHOLD becomes STRONG_SELL. Let's assume that's intended.
+            if overall_score < self.config.ScoringWeights.SELL_THRESHOLD: # Explicit STRONG_SELL
+                 recommendation = "STRONG_SELL"
+                 confidence = 0.9
+
+
             all_reasons = technical_reasons + fundamental_reasons
             
-            return StockAnalysis(
-                ticker=normalized_ticker, # Use the normalized ticker from data
-                company_name=data['company_name'],
-                current_price=data['current_price'],
-                sector=data['sector'],
-                rsi=data['rsi'],
-                sma_20=data['sma_20'],
-                sma_50=data['sma_50'],
-                momentum_20d=data['momentum_20d'],
-                pe_ratio=data['pe_ratio'],
-                roe=data['roe'],
-                debt_to_equity=data['debt_to_equity'],
+            # Ensure all required fields for StockAnalysis are present in `data` or have defaults
+            # Many of these are now Optional in StockAnalysis, so .get() with a default or direct access is fine
+            # However, for non-Optional fields in StockAnalysis that come from `data`, ensure they exist
+            # For example, rsi, sma_20, sma_50, momentum_20d, pe_ratio, roe, debt_to_equity are non-Optional in dataclass
+            # but are derived and could be None from get_stock_data if not calculable.
+            # This should be addressed by making them Optional in StockAnalysis or ensuring default float values.
+            # Forcing them to 0.0 if None for dataclass instantiation for now.
+
+            analysis_obj = StockAnalysis(
+                ticker=normalized_ticker,
+                company_name=data.get('company_name', 'N/A'), # type: ignore
+                current_price=data.get('current_price', 0.0), # type: ignore
+                sector=data.get('sector', 'N/A'), # type: ignore
+                rsi=data.get('rsi') if data.get('rsi') is not None else np.nan, # Use np.nan for float if None
+                sma_20=data.get('sma_20') if data.get('sma_20') is not None else np.nan,
+                sma_50=data.get('sma_50') if data.get('sma_50') is not None else np.nan,
+                momentum_20d=data.get('momentum_20d') if data.get('momentum_20d') is not None else np.nan,
+                pe_ratio=data.get('pe_ratio') if data.get('pe_ratio') is not None else np.nan,
+                roe=data.get('roe') if data.get('roe') is not None else np.nan,
+                debt_to_equity=data.get('debt_to_equity') if data.get('debt_to_equity') is not None else np.nan,
                 technical_score=technical_score,
                 fundamental_score=fundamental_score,
                 overall_score=overall_score,
@@ -962,18 +896,45 @@ class StockAnalyzer:
                 confidence=confidence,
                 reasons=all_reasons,
                 breakout_reasons=breakout_reasons,
-                # Add new trading parameters
+                is_volume_breakout=data.get('is_volume_breakout'),
+                volume_ratio=data.get('volume_ratio'),
+                sma_20_50_crossed_bullish=data.get('sma_20_50_crossed_bullish'),
+                sma_50_200_crossed_bullish=data.get('sma_50_200_crossed_bullish'),
+                sma_20_50_crossed_bearish=data.get('sma_20_50_crossed_bearish'),
+                sma_50_200_crossed_bearish=data.get('sma_50_200_crossed_bearish'),
+                bb_breakout_upper=data.get('bb_breakout_upper'),
+                bb_squeeze=data.get('bb_squeeze'),
+                bb_upper=data.get('bb_upper'),
+                bb_lower=data.get('bb_lower'),
+                bb_ma=data.get('bb_ma'),
+                breakout_n_day_high=data.get('breakout_n_day_high'),
+                breakdown_n_day_low=data.get('breakdown_n_day_low'),
+                n_day_high=data.get('n_day_high'),
+                n_day_low=data.get('n_day_low'),
+                macd_bullish_crossover=data.get('macd_bullish_crossover'),
+                macd_bearish_crossover=data.get('macd_bearish_crossover'),
+                rsi_recovered_from_oversold=data.get('rsi_recovered_from_oversold'),
+                macd_line=data.get('macd_line'),
+                macd_signal_line=data.get('macd_signal_line'),
                 suggested_entry_price=trading_parameters.get('suggested_entry_price'),
                 target_price_1=trading_parameters.get('target_price_1'),
                 stop_loss_price=trading_parameters.get('stop_loss_price'),
                 risk_reward_ratio=trading_parameters.get('risk_reward_ratio'),
-                risk_level=trading_parameters.get('risk_level'),
+                risk_level=trading_parameters.get('risk_level'), # type: ignore
                 max_position_size_pct=trading_parameters.get('max_position_size_pct'),
-                trading_strategy_summary=trading_parameters.get('trading_strategy_summary'),
-                time_horizon=trading_parameters.get('time_horizon')
+                trading_strategy_summary=trading_parameters.get('trading_strategy_summary'), # type: ignore
+                time_horizon=trading_parameters.get('time_horizon') # type: ignore
             )
+            # Fill NaN values for non-optional float fields with a default (e.g., 0.0 or specific np.nan handling)
+            # This is a workaround for the dataclass non-Optional float fields if data source can provide None
+            for field_name in ['rsi', 'sma_20', 'sma_50', 'momentum_20d', 'pe_ratio', 'roe', 'debt_to_equity']:
+                if getattr(analysis_obj, field_name) is None or (isinstance(getattr(analysis_obj, field_name), float) and np and np.isnan(getattr(analysis_obj, field_name))):
+                     # logger.warning(f"Ticker '{normalized_ticker}': Field {field_name} is None/NaN, setting to np.nan for dataclass.")
+                     setattr(analysis_obj, field_name, np.nan if np else 0.0) # Use np.nan if numpy is available, else 0.0
+            return analysis_obj
+
         except Exception as e:
-            logger.error(f"Unexpected error during detailed analysis of ticker '{data.get('ticker', ticker)}': {e}", exc_info=True) # Use normalized ticker if available
+            logger.error(f"Unexpected error during detailed analysis of ticker '{data.get('ticker', ticker) if data else ticker}': {e}", exc_info=True)
             return None
     
     def analyze_multiple_stocks(self, tickers: List[str]) -> List[StockAnalysis]:
@@ -983,12 +944,10 @@ class StockAnalyzer:
         logger.info(f"Starting analysis for {len(tickers)} stock(s): {tickers}")
         results = []
         for i, ticker_input in enumerate(tickers, 1):
-            # Ticker input here is exactly as provided in the list
             logger.info(f"Processing {i}/{len(tickers)}: '{ticker_input}'")
             analysis = self.analyze_stock(ticker_input)
             if analysis:
                 results.append(analysis)
-            # analyze_stock and get_stock_data handle their own detailed logging for failures
         logger.info(f"Analysis completed. {len(results)} stocks analyzed successfully.")
         return results
     
@@ -1009,72 +968,148 @@ class StockAnalyzer:
 def main():
     analyzer = StockAnalyzer()
 
-    # Check if critical modules loaded, pd, yf are most critical for fetching and processing.
-    # np is often a dependency of pandas or yfinance, so covered by them.
-    # requests is used by yfinance internally or if we add direct web calls.
     if not pd or not yf:
         logger.critical("Critical libraries (Pandas or yfinance) not loaded. Aborting main execution.")
         print("❌ Critical libraries (Pandas or yfinance) failed to load. Please check the log and install missing packages. Exiting.")
         return
 
-    # Updated test tickers for breakout system testing
-    test_tickers = ['AAPL', 'MSFT', 'NVDA', 'AMD', 'JNJ', 'FSLY', 'BADTICKER']
+    comprehensive_test_tickers = [
+        # Large caps
+        'AAPL', 'MSFT', 'GOOG', 'AMZN', 'NVDA',
+        # Different sectors
+        'JPM',  # Financials
+        'JNJ',  # Healthcare
+        'XOM',  # Energy
+        'PG',   # Consumer Staples
+        'KO',   # Consumer Staples
+        # Various price ranges/other large caps
+        'TSLA', 'META', 'V', 'WMT', 'HD',
+        # Additional diverse S&P 500 stocks
+        'CVX',  # Energy (another one for diversity)
+        'PFE',  # Healthcare (another one)
+        'BAC',  # Financials (another one)
+        'CSCO', # Technology/Networking
+        'PEP'   # Consumer Staples/Beverages
+    ]
 
-    print(f"🧪 Starting breakout system test analysis for tickers: {test_tickers}")
-    
-    # analyze_multiple_stocks returns a list of StockAnalysis objects for successfully analyzed stocks
-    analyzed_results = analyzer.analyze_multiple_stocks(test_tickers)
+    analyzer = StockAnalyzer()
+    logger.info(f"Starting comprehensive analysis for {len(comprehensive_test_tickers)} stocks...")
+    results_list: List[StockAnalysis] = []
 
-    successfully_analyzed_tickers = {result.ticker for result in analyzed_results} # Normalized tickers
-
-    print("\n📋 Test Analysis Summary:")
-    print("-" * 30)
-
-    for ticker_input in test_tickers:
-        # Need to find if the original ticker_input (or its normalized form) was analyzed
-        # get_stock_data normalizes, so data.ticker in StockAnalysis object is normalized.
-        # We compare normalized versions for robustness.
-        normalized_input = ticker_input.strip().upper()
-        found_analysis = None
-        for analysis in analyzed_results:
-            if analysis.ticker == normalized_input: # analysis.ticker is already normalized
-                found_analysis = analysis
-                break
-
-        if found_analysis:
-            print(f"\n✅ {found_analysis.ticker} ({found_analysis.company_name}):")
-            print(f"  Price: ${found_analysis.current_price:.2f}")
-            print(f"  Price: ${found_analysis.current_price:.2f}, RSI: {found_analysis.rsi:.2f if found_analysis.rsi is not None else 'N/A'}") # type: ignore
-            print(f"  Overall Score: {found_analysis.overall_score:.1f}/100, Recommendation: {found_analysis.recommendation} ({found_analysis.confidence:.0%})") # type: ignore
-            if found_analysis.reasons: # type: ignore
-                print(f"  Std. Reasons: {'; '.join(found_analysis.reasons)}") # type: ignore
-
-            print(f"  --- Breakout Signals & Score ---")
-            # Individual signals are now part of the trading plan summary or can be logged for debug
-            if found_analysis.breakout_score is not None: # type: ignore
-                print(f"    Breakout Score: {found_analysis.breakout_score:.1f}/100") # type: ignore
-            if found_analysis.breakout_reasons: # type: ignore
-                print(f"    Breakout Reasons: {'; '.join(found_analysis.breakout_reasons)}") # type: ignore
-
-            print(f"  --- Trading Plan ({found_analysis.risk_level}) ---") # type: ignore
-            if found_analysis.trading_strategy_summary: # type: ignore
-                # More detailed print for each component of the trading plan
-                print(f"    Summary: {found_analysis.trading_strategy_summary}") # type: ignore
-                if found_analysis.suggested_entry_price is not None:print(f"      Suggested Entry: ~${found_analysis.suggested_entry_price:.2f}") # type: ignore
-                if found_analysis.stop_loss_price is not None: print(f"      Stop-Loss: ~${found_analysis.stop_loss_price:.2f}") # type: ignore
-                if found_analysis.target_price_1 is not None: print(f"      Target 1: ~${found_analysis.target_price_1:.2f}") # type: ignore
-                if found_analysis.risk_reward_ratio is not None: print(f"      Risk/Reward Ratio: {found_analysis.risk_reward_ratio:.2f}:1") # type: ignore
-                if found_analysis.max_position_size_pct is not None: print(f"      Max Position Size: {found_analysis.max_position_size_pct:.0%}") # type: ignore
-            else:
-                print("    No trading plan generated (e.g., breakout score too low or data missing).")
+    for i, ticker_symbol in enumerate(comprehensive_test_tickers, 1):
+        logger.info(f"Processing {i}/{len(comprehensive_test_tickers)}: {ticker_symbol}")
+        analysis_result = analyzer.analyze_stock(ticker_symbol)
+        if analysis_result:
+            results_list.append(analysis_result)
         else:
-            # This ticker_input was not successfully analyzed. Logs should indicate why.
-            print(f"\n❌ {ticker_input.upper()}: Analysis failed or skipped (see logs for details).")
+            logger.warning(f"No analysis data returned for {ticker_symbol}. It will be excluded from the report.")
 
-    print("-" * 30)
-    print(f"📈 Test analysis completed. Successfully analyzed {len(analyzed_results)} out of {len(test_tickers)} tickers.")
+    logger.info(f"Successfully analyzed {len(results_list)} out of {len(comprehensive_test_tickers)} stocks.")
+
+    # Process collected analysis data for summary report
+    risk_level_counts = {"Conservative": 0, "Moderate": 0, "Aggressive": 0, "Undefined": 0, "Other": 0}
+    tradeable_setups: List[StockAnalysis] = []
+    all_risk_reward_ratios: List[float] = []
+    problematic_analyses: List[str] = []
+
+    for analysis in results_list:
+        current_risk_level = analysis.risk_level if analysis.risk_level else "Undefined"
+        risk_level_counts[current_risk_level] = risk_level_counts.get(current_risk_level, 0) + 1
+
+        if current_risk_level not in ["Undefined", "Other"] and \
+           analysis.suggested_entry_price is not None and \
+           analysis.stop_loss_price is not None and \
+           analysis.target_price_1 is not None:
+            tradeable_setups.append(analysis)
+            if analysis.risk_reward_ratio is not None and isinstance(analysis.risk_reward_ratio, (float, int)):
+                all_risk_reward_ratios.append(analysis.risk_reward_ratio)
+
+        if analysis.breakout_score is None:
+            problematic_analyses.append(f"Ticker {analysis.ticker}: Breakout score is None despite analysis object being present.")
+
+        if current_risk_level not in ["Undefined", "Other"] and \
+           (not analysis.suggested_entry_price or not analysis.stop_loss_price or not analysis.target_price_1):
+            problematic_analyses.append(f"Ticker {analysis.ticker}: Risk Level '{current_risk_level}' but missing essential trade parameters (Entry/SL/TP).")
+
+    valid_for_top_5 = [ts for ts in tradeable_setups if ts.breakout_score is not None]
+    sorted_by_breakout_score = sorted(valid_for_top_5, key=lambda x: x.breakout_score if x.breakout_score is not None else -1, reverse=True)
+    top_5_breakout_candidates = sorted_by_breakout_score[:5]
+
+    avg_rr_ratio = None
+    max_rr_value = None
+    min_rr_value = None
+    max_rr_ticker = ""
+    min_rr_ticker = ""
+
+    if all_risk_reward_ratios:
+        avg_rr_ratio = sum(all_risk_reward_ratios) / len(all_risk_reward_ratios)
+
+    temp_max_rr = -float('inf')
+    temp_min_rr = float('inf')
+    for ts_setup in tradeable_setups:
+        if ts_setup.risk_reward_ratio is not None:
+            if ts_setup.risk_reward_ratio > temp_max_rr:
+                temp_max_rr = ts_setup.risk_reward_ratio
+                max_rr_ticker = ts_setup.ticker
+            if ts_setup.risk_reward_ratio < temp_min_rr:
+                temp_min_rr = ts_setup.risk_reward_ratio
+                min_rr_ticker = ts_setup.ticker
+
+    if temp_max_rr != -float('inf'): max_rr_value = temp_max_rr
+    if temp_min_rr != float('inf'): min_rr_value = temp_min_rr
+
+    # --- Generate Formatted Summary Report Output ---
+    print("\n" + "="*60)
+    print("COMPREHENSIVE BREAKOUT TRADING SYSTEM REPORT")
+    print(f"Analysis Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"Total Stocks Scanned: {len(comprehensive_test_tickers)}")
+    print(f"Successfully Processed: {len(results_list)}")
+    print("="*60 + "\n")
+
+    print("--- Risk Level Distribution ---")
+    print(f"Conservative Candidates: {risk_level_counts.get('Conservative', 0)}")
+    print(f"Moderate Candidates:     {risk_level_counts.get('Moderate', 0)}")
+    print(f"Aggressive Candidates:   {risk_level_counts.get('Aggressive', 0)}")
+    print(f"Stocks with no trade signal (Undefined Risk or low score): {risk_level_counts.get('Undefined', 0) + risk_level_counts.get('Other', 0)}")
+    print("-"*(len("--- Risk Level Distribution ---")) + "\n")
+
+    print("--- Top 5 Breakout Candidates (by Breakout Score) ---")
+    if top_5_breakout_candidates:
+        for i, candidate in enumerate(top_5_breakout_candidates, 1):
+            print(f"{i}. Ticker: {candidate.ticker} ({candidate.company_name or 'N/A'})")
+            print(f"   Breakout Score: {candidate.breakout_score:.2f}/100" if candidate.breakout_score is not None else "   Breakout Score: N/A")
+            print(f"   Risk Level: {candidate.risk_level or 'N/A'}")
+            print(f"   Trading Plan: {candidate.trading_strategy_summary or 'N/A'}")
+            if i < len(top_5_breakout_candidates): print("   ---") # Separator
+    else:
+        print("No tradeable breakout candidates found with sufficient score.")
+    print("-"*(len("--- Top 5 Breakout Candidates (by Breakout Score) ---")) + "\n")
+
+    print("--- Risk/Reward Overview (for tradeable setups) ---")
+    if all_risk_reward_ratios:
+        print(f"Average Risk/Reward Ratio: {avg_rr_ratio:.2f}:1" if avg_rr_ratio is not None else "Average Risk/Reward Ratio: N/A")
+        print(f"Highest Risk/Reward Ratio: {max_rr_value:.2f}:1 (Ticker: {max_rr_ticker})" if max_rr_value is not None and max_rr_ticker else "Highest Risk/Reward Ratio: N/A")
+        print(f"Lowest Risk/Reward Ratio:  {min_rr_value:.2f}:1 (Ticker: {min_rr_ticker})" if min_rr_value is not None and min_rr_ticker else "Lowest Risk/Reward Ratio: N/A")
+    else:
+        print("No tradeable setups with Risk/Reward information available.")
+    print("-"*(len("--- Risk/Reward Overview (for tradeable setups) ---")) + "\n")
+
+    print("--- Issues and Observations ---")
+    if problematic_analyses:
+        print("Potential issues found during analysis (see logs for more details):")
+        for problem in problematic_analyses:
+            print(f"  - {problem}")
+    else:
+        print("No significant processing issues identified for successfully analyzed stocks.")
+    print("-"*(len("--- Issues and Observations ---")) + "\n")
+
+    print("="*60)
+    print("End of Report")
+    print("="*60)
 
 if __name__ == "__main__":
     # Setup logger to show DEBUG messages for this test run if desired
-    # logging.getLogger().setLevel(logging.DEBUG)
+    # logging.getLogger().setLevel(logging.DEBUG) # Example: Enable DEBUG for more verbose logs
     main()
+
+[end of stock_analyzer.py]
