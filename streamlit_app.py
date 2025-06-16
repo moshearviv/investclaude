@@ -191,6 +191,13 @@ def display_stock_analysis(analysis: StockAnalysis, rank: int):
             )
         else:
             st.metric("Risk/Reward", "N/A")
+
+    # Add new metrics for Entry and Stop Loss prices
+    col_entry, col_stop = st.columns(2)
+    with col_entry:
+        st.metric("Suggested Entry Price", f"${analysis.suggested_entry_price:.2f}" if analysis.suggested_entry_price is not None else "N/A", help="Recommended price to consider entering a trade.")
+    with col_stop:
+        st.metric("Stop Loss Price", f"${analysis.stop_loss_price:.2f}" if analysis.stop_loss_price is not None else "N/A", help="Recommended price to set a stop loss.")
     
     # Breakout signals detected
     if analysis.breakout_reasons:
@@ -387,15 +394,23 @@ def main():
                         'Ticker': analysis.ticker,
                         'Company': analysis.company_name[:30] + "..." if len(analysis.company_name) > 30 else analysis.company_name,
                         'Current Price': f"${analysis.current_price:.2f}",
-                        'Breakout Score': f"{analysis.breakout_score:.1f}" if analysis.breakout_score else "N/A",
+                        'Entry Price': f"${analysis.suggested_entry_price:.2f}" if analysis.suggested_entry_price is not None else "N/A",
+                        'Target Price': f"${analysis.target_price_1:.2f}" if analysis.target_price_1 is not None else "N/A",
+                        'Stop Loss': f"${analysis.stop_loss_price:.2f}" if analysis.stop_loss_price is not None else "N/A",
+                        'Upside %': f"+{((analysis.target_price_1/analysis.current_price-1)*100):.1f}%" if analysis.target_price_1 and analysis.current_price else "N/A",
+                        'Risk/Reward': f"{analysis.risk_reward_ratio:.1f}:1" if analysis.risk_reward_ratio is not None else "N/A",
+                        'Breakout Score': f"{analysis.breakout_score:.1f}" if analysis.breakout_score is not None else "N/A",
                         'Risk Level': analysis.risk_level or "N/A",
-                        'Sector': analysis.sector,
-                        'Target Price': f"${analysis.target_price_1:.2f}" if analysis.target_price_1 else "N/A",
-                        'Upside %': f"+{((analysis.target_price_1/analysis.current_price-1)*100):.1f}%" if analysis.target_price_1 else "N/A",
-                        'Risk/Reward': f"{analysis.risk_reward_ratio:.1f}:1" if analysis.risk_reward_ratio else "N/A"
+                        'Sector': analysis.sector
                     })
                 
+                # Define desired column order
+                desired_columns = ['Ticker', 'Company', 'Current Price', 'Entry Price', 'Target Price', 'Stop Loss', 'Upside %', 'Risk/Reward', 'Breakout Score', 'Risk Level', 'Sector']
+
                 df = pd.DataFrame(summary_data)
+                # Reorder DataFrame columns
+                df = df[desired_columns]
+
                 st.dataframe(df, use_container_width=True)
                 
                 # Download button
