@@ -991,12 +991,6 @@ class StockAnalyzer:
         return buy_recommendations, sell_recommendations
 
 def main():
-    # Setup logger to show DEBUG messages for this test run if desired
-    # logging.getLogger().setLevel(logging.DEBUG) # Example: Enable DEBUG for more verbose logs
-    # Reconfigure logging for this specific test run to DEBUG level
-    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s', force=True)
-    logger.info("Logging reconfigured to DEBUG for AMD test run.") # Updated for AMD
-
     analyzer = StockAnalyzer()
 
     if not pd or not yf:
@@ -1004,128 +998,139 @@ def main():
         print("❌ Critical libraries (Pandas or yfinance) failed to load. Please check the log and install missing packages. Exiting.")
         return
 
-    test_tickers = ['AMD'] # Changed to AMD
+    comprehensive_test_tickers = [
+        # Large caps
+        'AAPL', 'MSFT', 'GOOG', 'AMZN', 'NVDA',
+        # Different sectors
+        'JPM',  # Financials
+        'JNJ',  # Healthcare
+        'XOM',  # Energy
+        'PG',   # Consumer Staples
+        'KO',   # Consumer Staples
+        # Various price ranges/other large caps
+        'TSLA', 'META', 'V', 'WMT', 'HD',
+        # Additional diverse S&P 500 stocks
+        'CVX',  # Energy (another one for diversity)
+        'PFE',  # Healthcare (another one)
+        'BAC',  # Financials (another one)
+        'CSCO', # Technology/Networking
+        'PEP'   # Consumer Staples/Beverages
+    ]
 
     analyzer = StockAnalyzer()
-    logger.info(f"Starting analysis for {len(test_tickers)} stocks: {test_tickers}")
+    logger.info(f"Starting comprehensive analysis for {len(comprehensive_test_tickers)} stocks...")
     results_list: List[StockAnalysis] = []
 
-    for i, ticker_symbol in enumerate(test_tickers, 1):
-        logger.info(f"Processing {i}/{len(test_tickers)}: {ticker_symbol}")
+    for i, ticker_symbol in enumerate(comprehensive_test_tickers, 1):
+        logger.info(f"Processing {i}/{len(comprehensive_test_tickers)}: {ticker_symbol}")
         analysis_result = analyzer.analyze_stock(ticker_symbol)
         if analysis_result:
-            # results_list.append(analysis_result) # Optional for single test
-            if analysis_result.ticker == 'AMD': # Changed to AMD
-                logger.info(f"--- AMD Breakout Analysis Test ---") # Changed to AMD
-                logger.info(f"Ticker: {analysis_result.ticker}")
-                logger.info(f"Breakout Score: {analysis_result.breakout_score}")
-                logger.info(f"Breakout Reasons: {analysis_result.breakout_reasons}")
-                logger.info(f"--- End AMD Test ---") # Changed to AMD
+            results_list.append(analysis_result)
         else:
             logger.warning(f"No analysis data returned for {ticker_symbol}. It will be excluded from the report.")
 
-    logger.info(f"Successfully analyzed {len(results_list)} out of {len(test_tickers)} stocks.")
+    logger.info(f"Successfully analyzed {len(results_list)} out of {len(comprehensive_test_tickers)} stocks.")
 
-    # Process collected analysis data for summary report - Commented out for AMD test
-    # risk_level_counts = {"Conservative": 0, "Moderate": 0, "Aggressive": 0, "Undefined": 0, "Other": 0}
-    # tradeable_setups: List[StockAnalysis] = []
-    # all_risk_reward_ratios: List[float] = []
-    # problematic_analyses: List[str] = []
+    # Process collected analysis data for summary report
+    risk_level_counts = {"Conservative": 0, "Moderate": 0, "Aggressive": 0, "Undefined": 0, "Other": 0}
+    tradeable_setups: List[StockAnalysis] = []
+    all_risk_reward_ratios: List[float] = []
+    problematic_analyses: List[str] = []
 
-    # for analysis in results_list:
-    #     current_risk_level = analysis.risk_level if analysis.risk_level else "Undefined"
-    #     risk_level_counts[current_risk_level] = risk_level_counts.get(current_risk_level, 0) + 1
+    for analysis in results_list:
+        current_risk_level = analysis.risk_level if analysis.risk_level else "Undefined"
+        risk_level_counts[current_risk_level] = risk_level_counts.get(current_risk_level, 0) + 1
 
-    #     if current_risk_level not in ["Undefined", "Other"] and \
-    #        analysis.suggested_entry_price is not None and \
-    #        analysis.stop_loss_price is not None and \
-    #        analysis.target_price_1 is not None:
-    #         tradeable_setups.append(analysis)
-    #         if analysis.risk_reward_ratio is not None and isinstance(analysis.risk_reward_ratio, (float, int)):
-    #             all_risk_reward_ratios.append(analysis.risk_reward_ratio)
+        if current_risk_level not in ["Undefined", "Other"] and \
+           analysis.suggested_entry_price is not None and \
+           analysis.stop_loss_price is not None and \
+           analysis.target_price_1 is not None:
+            tradeable_setups.append(analysis)
+            if analysis.risk_reward_ratio is not None and isinstance(analysis.risk_reward_ratio, (float, int)):
+                all_risk_reward_ratios.append(analysis.risk_reward_ratio)
 
-    #     if analysis.breakout_score is None:
-    #         problematic_analyses.append(f"Ticker {analysis.ticker}: Breakout score is None despite analysis object being present.")
+        if analysis.breakout_score is None:
+            problematic_analyses.append(f"Ticker {analysis.ticker}: Breakout score is None despite analysis object being present.")
 
-    #     if current_risk_level not in ["Undefined", "Other"] and \
-    #        (not analysis.suggested_entry_price or not analysis.stop_loss_price or not analysis.target_price_1):
-    #         problematic_analyses.append(f"Ticker {analysis.ticker}: Risk Level '{current_risk_level}' but missing essential trade parameters (Entry/SL/TP).")
+        if current_risk_level not in ["Undefined", "Other"] and \
+           (not analysis.suggested_entry_price or not analysis.stop_loss_price or not analysis.target_price_1):
+            problematic_analyses.append(f"Ticker {analysis.ticker}: Risk Level '{current_risk_level}' but missing essential trade parameters (Entry/SL/TP).")
 
-    # valid_for_top_5 = [ts for ts in tradeable_setups if ts.breakout_score is not None]
-    # sorted_by_breakout_score = sorted(valid_for_top_5, key=lambda x: x.breakout_score if x.breakout_score is not None else -1, reverse=True)
-    # top_5_breakout_candidates = sorted_by_breakout_score[:5]
+    valid_for_top_5 = [ts for ts in tradeable_setups if ts.breakout_score is not None]
+    sorted_by_breakout_score = sorted(valid_for_top_5, key=lambda x: x.breakout_score if x.breakout_score is not None else -1, reverse=True)
+    top_5_breakout_candidates = sorted_by_breakout_score[:5]
 
-    # avg_rr_ratio = None
-    # max_rr_value = None
-    # min_rr_value = None
-    # max_rr_ticker = ""
-    # min_rr_ticker = ""
+    avg_rr_ratio = None
+    max_rr_value = None
+    min_rr_value = None
+    max_rr_ticker = ""
+    min_rr_ticker = ""
 
-    # if all_risk_reward_ratios:
-    #     avg_rr_ratio = sum(all_risk_reward_ratios) / len(all_risk_reward_ratios)
+    if all_risk_reward_ratios:
+        avg_rr_ratio = sum(all_risk_reward_ratios) / len(all_risk_reward_ratios)
 
-    # temp_max_rr = -float('inf')
-    # temp_min_rr = float('inf')
-    # for ts_setup in tradeable_setups:
-    #     if ts_setup.risk_reward_ratio is not None:
-    #         if ts_setup.risk_reward_ratio > temp_max_rr:
-    #             temp_max_rr = ts_setup.risk_reward_ratio
-    #             max_rr_ticker = ts_setup.ticker
-    #         if ts_setup.risk_reward_ratio < temp_min_rr:
-    #             temp_min_rr = ts_setup.risk_reward_ratio
-    #             min_rr_ticker = ts_setup.ticker
+    temp_max_rr = -float('inf')
+    temp_min_rr = float('inf')
+    for ts_setup in tradeable_setups:
+        if ts_setup.risk_reward_ratio is not None:
+            if ts_setup.risk_reward_ratio > temp_max_rr:
+                temp_max_rr = ts_setup.risk_reward_ratio
+                max_rr_ticker = ts_setup.ticker
+            if ts_setup.risk_reward_ratio < temp_min_rr:
+                temp_min_rr = ts_setup.risk_reward_ratio
+                min_rr_ticker = ts_setup.ticker
 
-    # if temp_max_rr != -float('inf'): max_rr_value = temp_max_rr
-    # if temp_min_rr != float('inf'): min_rr_value = temp_min_rr
+    if temp_max_rr != -float('inf'): max_rr_value = temp_max_rr
+    if temp_min_rr != float('inf'): min_rr_value = temp_min_rr
 
-    # # --- Generate Formatted Summary Report Output ---
-    # print("\n" + "="*60)
-    # print("COMPREHENSIVE BREAKOUT TRADING SYSTEM REPORT")
-    # print(f"Analysis Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    # print(f"Total Stocks Scanned: {len(test_tickers)}") # Adjusted
-    # print(f"Successfully Processed: {len(results_list)}")
-    # print("="*60 + "\n")
+    # --- Generate Formatted Summary Report Output ---
+    print("\n" + "="*60)
+    print("COMPREHENSIVE BREAKOUT TRADING SYSTEM REPORT")
+    print(f"Analysis Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"Total Stocks Scanned: {len(comprehensive_test_tickers)}")
+    print(f"Successfully Processed: {len(results_list)}")
+    print("="*60 + "\n")
 
-    # print("--- Risk Level Distribution ---")
-    # print(f"Conservative Candidates: {risk_level_counts.get('Conservative', 0)}")
-    # print(f"Moderate Candidates:     {risk_level_counts.get('Moderate', 0)}")
-    # print(f"Aggressive Candidates:   {risk_level_counts.get('Aggressive', 0)}")
-    # print(f"Stocks with no trade signal (Undefined Risk or low score): {risk_level_counts.get('Undefined', 0) + risk_level_counts.get('Other', 0)}")
-    # print("-"*(len("--- Risk Level Distribution ---")) + "\n")
+    print("--- Risk Level Distribution ---")
+    print(f"Conservative Candidates: {risk_level_counts.get('Conservative', 0)}")
+    print(f"Moderate Candidates:     {risk_level_counts.get('Moderate', 0)}")
+    print(f"Aggressive Candidates:   {risk_level_counts.get('Aggressive', 0)}")
+    print(f"Stocks with no trade signal (Undefined Risk or low score): {risk_level_counts.get('Undefined', 0) + risk_level_counts.get('Other', 0)}")
+    print("-"*(len("--- Risk Level Distribution ---")) + "\n")
 
-    # print("--- Top 5 Breakout Candidates (by Breakout Score) ---")
-    # if top_5_breakout_candidates:
-    #     for i, candidate in enumerate(top_5_breakout_candidates, 1):
-    #         print(f"{i}. Ticker: {candidate.ticker} ({candidate.company_name or 'N/A'})")
-    #         print(f"   Breakout Score: {candidate.breakout_score:.2f}/100" if candidate.breakout_score is not None else "   Breakout Score: N/A")
-    #         print(f"   Risk Level: {candidate.risk_level or 'N/A'}")
-    #         print(f"   Trading Plan: {candidate.trading_strategy_summary or 'N/A'}")
-    #         if i < len(top_5_breakout_candidates): print("   ---") # Separator
-    # else:
-    #     print("No tradeable breakout candidates found with sufficient score.")
-    # print("-"*(len("--- Top 5 Breakout Candidates (by Breakout Score) ---")) + "\n")
+    print("--- Top 5 Breakout Candidates (by Breakout Score) ---")
+    if top_5_breakout_candidates:
+        for i, candidate in enumerate(top_5_breakout_candidates, 1):
+            print(f"{i}. Ticker: {candidate.ticker} ({candidate.company_name or 'N/A'})")
+            print(f"   Breakout Score: {candidate.breakout_score:.2f}/100" if candidate.breakout_score is not None else "   Breakout Score: N/A")
+            print(f"   Risk Level: {candidate.risk_level or 'N/A'}")
+            print(f"   Trading Plan: {candidate.trading_strategy_summary or 'N/A'}")
+            if i < len(top_5_breakout_candidates): print("   ---") # Separator
+    else:
+        print("No tradeable breakout candidates found with sufficient score.")
+    print("-"*(len("--- Top 5 Breakout Candidates (by Breakout Score) ---")) + "\n")
 
-    # print("--- Risk/Reward Overview (for tradeable setups) ---")
-    # if all_risk_reward_ratios:
-    #     print(f"Average Risk/Reward Ratio: {avg_rr_ratio:.2f}:1" if avg_rr_ratio is not None else "Average Risk/Reward Ratio: N/A")
-    #     print(f"Highest Risk/Reward Ratio: {max_rr_value:.2f}:1 (Ticker: {max_rr_ticker})" if max_rr_value is not None and max_rr_ticker else "Highest Risk/Reward Ratio: N/A")
-    #     print(f"Lowest Risk/Reward Ratio:  {min_rr_value:.2f}:1 (Ticker: {min_rr_ticker})" if min_rr_value is not None and min_rr_ticker else "Lowest Risk/Reward Ratio: N/A")
-    # else:
-    #     print("No tradeable setups with Risk/Reward information available.")
-    # print("-"*(len("--- Risk/Reward Overview (for tradeable setups) ---")) + "\n")
+    print("--- Risk/Reward Overview (for tradeable setups) ---")
+    if all_risk_reward_ratios:
+        print(f"Average Risk/Reward Ratio: {avg_rr_ratio:.2f}:1" if avg_rr_ratio is not None else "Average Risk/Reward Ratio: N/A")
+        print(f"Highest Risk/Reward Ratio: {max_rr_value:.2f}:1 (Ticker: {max_rr_ticker})" if max_rr_value is not None and max_rr_ticker else "Highest Risk/Reward Ratio: N/A")
+        print(f"Lowest Risk/Reward Ratio:  {min_rr_value:.2f}:1 (Ticker: {min_rr_ticker})" if min_rr_value is not None and min_rr_ticker else "Lowest Risk/Reward Ratio: N/A")
+    else:
+        print("No tradeable setups with Risk/Reward information available.")
+    print("-"*(len("--- Risk/Reward Overview (for tradeable setups) ---")) + "\n")
 
-    # print("--- Issues and Observations ---")
-    # if problematic_analyses:
-    #     print("Potential issues found during analysis (see logs for more details):")
-    #     for problem in problematic_analyses:
-    #         print(f"  - {problem}")
-    # else:
-    #     print("No significant processing issues identified for successfully analyzed stocks.")
-    # print("-"*(len("--- Issues and Observations ---")) + "\n")
+    print("--- Issues and Observations ---")
+    if problematic_analyses:
+        print("Potential issues found during analysis (see logs for more details):")
+        for problem in problematic_analyses:
+            print(f"  - {problem}")
+    else:
+        print("No significant processing issues identified for successfully analyzed stocks.")
+    print("-"*(len("--- Issues and Observations ---")) + "\n")
 
-    # print("="*60)
-    # print("End of Report")
-    # print("="*60)
+    print("="*60)
+    print("End of Report")
+    print("="*60)
 
 if __name__ == "__main__":
     main()

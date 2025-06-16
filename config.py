@@ -111,9 +111,9 @@ class Config:
     class BreakoutScoringWeights:
         """Weights for individual breakout signals - how much each signal contributes to a 'breakout score'"""
         # These are relative strengths of signals, not necessarily summing to 1 unless part of a combined score.
-        VOLUME_BREAKOUT_WEIGHT: float = 0.15
-        PRICE_BREAKOUT_S_R_WEIGHT: float = 0.20  # Placeholder for Support/Resistance breakout
-        MA_CROSSOVER_WEIGHT: float = 0.20        # e.g., Price crossing above SMA50 or SMA20/SMA50 crossover
+        VOLUME_BREAKOUT_WEIGHT: float = 0.20
+        PRICE_BREAKOUT_S_R_WEIGHT: float = 0.25  # Placeholder for Support/Resistance breakout
+        MA_CROSSOVER_WEIGHT: float = 0.25        # e.g., Price crossing above SMA50 or SMA20/SMA50 crossover
         BB_BREAKOUT_WEIGHT: float = 0.15         # Price breaking above upper Bollinger Band
         BB_SQUEEZE_WEIGHT: float = 0.10          # Strength of the Bollinger Band Squeeze itself (potential energy)
         MACD_CROSSOVER_WEIGHT: float = 0.15      # MACD line crossing above signal line
@@ -126,9 +126,9 @@ class Config:
         """Parameters for defining trade execution and risk management strategies."""
 
         # Risk Level Breakout Score Thresholds: Minimum breakout_score needed to consider a trade
-        CONSERVATIVE_BREAKOUT_SCORE_MIN: int = 80
-        MODERATE_BREAKOUT_SCORE_MIN: int = 60
-        AGGRESSIVE_BREAKOUT_SCORE_MIN: int = 40
+        CONSERVATIVE_BREAKOUT_SCORE_MIN: int = 50
+        MODERATE_BREAKOUT_SCORE_MIN: int = 30
+        AGGRESSIVE_BREAKOUT_SCORE_MIN: int = 15
 
         # Stop-Loss Percentages (from entry price)
         CONSERVATIVE_STOP_LOSS_PCT: float = 0.03  # 3% stop-loss
