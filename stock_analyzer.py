@@ -852,6 +852,8 @@ class StockAnalyzer:
             fundamental_score, fundamental_reasons = self.calculate_fundamental_score(data)
             breakout_score, breakout_reasons = self.calculate_breakout_score(data)
             logger.debug(f"Ticker '{normalized_ticker}': Received from calculate_breakout_score - Score: {breakout_score}, Reasons: {breakout_reasons}")
+            data['breakout_score'] = breakout_score # Update data dictionary
+            logger.debug(f"Ticker '{normalized_ticker}': Updated data dictionary with breakout_score: {data['breakout_score']}")
             
             hist_df_for_trading_params = data.get('hist_data_df')
             trading_parameters = self.calculate_trading_parameters(data, hist_df_for_trading_params)
@@ -993,7 +995,7 @@ def main():
     # logging.getLogger().setLevel(logging.DEBUG) # Example: Enable DEBUG for more verbose logs
     # Reconfigure logging for this specific test run to DEBUG level
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s', force=True)
-    logger.info("Logging reconfigured to DEBUG for NVDA test run.")
+    logger.info("Logging reconfigured to DEBUG for AMD test run.") # Updated for AMD
 
     analyzer = StockAnalyzer()
 
@@ -1002,7 +1004,7 @@ def main():
         print("❌ Critical libraries (Pandas or yfinance) failed to load. Please check the log and install missing packages. Exiting.")
         return
 
-    test_tickers = ['NVDA'] # Changed from comprehensive_test_tickers
+    test_tickers = ['AMD'] # Changed to AMD
 
     analyzer = StockAnalyzer()
     logger.info(f"Starting analysis for {len(test_tickers)} stocks: {test_tickers}")
@@ -1013,18 +1015,18 @@ def main():
         analysis_result = analyzer.analyze_stock(ticker_symbol)
         if analysis_result:
             # results_list.append(analysis_result) # Optional for single test
-            if analysis_result.ticker == 'NVDA':
-                logger.info(f"--- NVDA Breakout Analysis Test ---")
+            if analysis_result.ticker == 'AMD': # Changed to AMD
+                logger.info(f"--- AMD Breakout Analysis Test ---") # Changed to AMD
                 logger.info(f"Ticker: {analysis_result.ticker}")
-                logger.info(f"Breakout Score: {analysis_result.breakout_score}") # This should be a float
+                logger.info(f"Breakout Score: {analysis_result.breakout_score}")
                 logger.info(f"Breakout Reasons: {analysis_result.breakout_reasons}")
-                logger.info(f"--- End NVDA Test ---")
+                logger.info(f"--- End AMD Test ---") # Changed to AMD
         else:
             logger.warning(f"No analysis data returned for {ticker_symbol}. It will be excluded from the report.")
 
     logger.info(f"Successfully analyzed {len(results_list)} out of {len(test_tickers)} stocks.")
 
-    # Process collected analysis data for summary report - Commented out for NVDA test
+    # Process collected analysis data for summary report - Commented out for AMD test
     # risk_level_counts = {"Conservative": 0, "Moderate": 0, "Aggressive": 0, "Undefined": 0, "Other": 0}
     # tradeable_setups: List[StockAnalysis] = []
     # all_risk_reward_ratios: List[float] = []
