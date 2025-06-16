@@ -691,19 +691,23 @@ class StockAnalyzer:
     def calculate_breakout_score(self, data: Dict) -> Tuple[Optional[float], List[str]]:
         score = 0.0
         reasons = []
-        ticker = data.get('ticker', 'Unknown')
+        # Ensure ticker is fetched early for logging, even if data is initially None/empty
+        ticker = data.get('ticker', 'Unknown') if data else 'Unknown'
 
         if not data:
-            logger.warning(f"Ticker '{ticker}': No data provided for breakout scoring. Returning 0.0 score.")
-            return 0.0, ["No data for breakout scoring"]
+            logger.warning(f"Ticker '{ticker}': No data provided for breakout scoring. Proceeding with score 0.0.")
+            reasons.append("No data provided for breakout scoring")
+            # Allow execution to continue to the end, score remains 0.0
 
-        weights = self.config.BreakoutScoringWeights
+        # Only proceed with signal calculation if data is present
+        if data:
+            weights = self.config.BreakoutScoringWeights
 
-        def get_signal(key: str) -> bool:
-            val = data.get(key)
-            return val if isinstance(val, bool) else False
+            def get_signal(key: str) -> bool:
+                val = data.get(key)
+                return val if isinstance(val, bool) else False
 
-        is_volume_breakout = get_signal('is_volume_breakout')
+            is_volume_breakout = get_signal('is_volume_breakout')
         breakout_n_day_high = get_signal('breakout_n_day_high')
         sma_20_50_crossed_bullish = get_signal('sma_20_50_crossed_bullish')
         sma_50_200_crossed_bullish = get_signal('sma_50_200_crossed_bullish')
@@ -759,14 +763,27 @@ class StockAnalyzer:
             reasons.append(f"RSI recovered from oversold (RSI: {data.get('rsi', 0.0):.1f})")
             logger.debug(f"Ticker '{ticker}': +{weights.RSI_RECOVERY_WEIGHT*100} for RSI recovery.")
 
+        # If after all checks, reasons is still empty, it means no signals were detected (or data was missing)
         if not reasons:
-            logger.info(f"Ticker '{ticker}': No breakout signals detected for breakout score.")
-            return 0.0, ["No specific breakout signals detected."]
+            # This case will also be hit if data was missing, and "No data provided..." was the only reason,
+            # but the problem asks to add "No specific breakout signals" if reasons is *empty* at this point.
+            # If data was missing, reasons list already contains "No data provided...".
+            # So, this specific message is for when data was present, but no signals fired.
+            if not any("No data provided for breakout scoring" in reason for reason in reasons):
+                 logger.info(f"Ticker '{ticker}': No specific breakout signals detected for breakout score.")
+                 reasons.append("No specific breakout signals detected.")
+            # If "No data provided..." is already there, we don't add this one. The log for missing data was already issued.
+
 
         final_score = max(0, min(100, score))
-        # Log final score and reasons if signals were detected
-        if reasons and not (len(reasons) == 1 and reasons[0] == "No specific breakout signals detected."):
-            logger.info(f"Ticker '{ticker}': Final breakout score: {final_score:.2f}. Contributing signals: {'; '.join(reasons)}")
+
+        # Log final score and reasons if actual signals were detected (i.e. more than just "No data" or "No specific signals")
+        log_worthy_reasons = [r for r in reasons if r not in ["No data provided for breakout scoring", "No specific breakout signals detected."]]
+        if log_worthy_reasons:
+            logger.info(f"Ticker '{ticker}': Final breakout score: {final_score:.2f}. Contributing signals: {'; '.join(log_worthy_reasons)}")
+        elif not any("No data provided for breakout scoring" in reason for reason in reasons): # Avoid double logging if data was missing
+            logger.info(f"Ticker '{ticker}': No breakout signals detected, final score: {final_score:.2f}.")
+
 
         return final_score, reasons
     
@@ -834,6 +851,7 @@ class StockAnalyzer:
             technical_score, technical_reasons = self.calculate_technical_score(data)
             fundamental_score, fundamental_reasons = self.calculate_fundamental_score(data)
             breakout_score, breakout_reasons = self.calculate_breakout_score(data)
+            logger.debug(f"Ticker '{normalized_ticker}': Received from calculate_breakout_score - Score: {breakout_score}, Reasons: {breakout_reasons}")
             
             hist_df_for_trading_params = data.get('hist_data_df')
             trading_parameters = self.calculate_trading_parameters(data, hist_df_for_trading_params)
@@ -880,7 +898,7 @@ class StockAnalyzer:
             # but are derived and could be None from get_stock_data if not calculable.
             # This should be addressed by making them Optional in StockAnalysis or ensuring default float values.
             # Forcing them to 0.0 if None for dataclass instantiation for now.
-
+            logger.debug(f"Ticker '{normalized_ticker}': Passing to StockAnalysis - breakout_score: {breakout_score}")
             analysis_obj = StockAnalysis(
                 ticker=normalized_ticker,
                 company_name=data.get('company_name', 'N/A'), # type: ignore
@@ -971,6 +989,12 @@ class StockAnalyzer:
         return buy_recommendations, sell_recommendations
 
 def main():
+    # Setup logger to show DEBUG messages for this test run if desired
+    # logging.getLogger().setLevel(logging.DEBUG) # Example: Enable DEBUG for more verbose logs
+    # Reconfigure logging for this specific test run to DEBUG level
+    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s', force=True)
+    logger.info("Logging reconfigured to DEBUG for NVDA test run.")
+
     analyzer = StockAnalyzer()
 
     if not pd or not yf:
@@ -978,143 +1002,130 @@ def main():
         print("❌ Critical libraries (Pandas or yfinance) failed to load. Please check the log and install missing packages. Exiting.")
         return
 
-    comprehensive_test_tickers = [
-        # Large caps
-        'AAPL', 'MSFT', 'GOOG', 'AMZN', 'NVDA',
-        # Different sectors
-        'JPM',  # Financials
-        'JNJ',  # Healthcare
-        'XOM',  # Energy
-        'PG',   # Consumer Staples
-        'KO',   # Consumer Staples
-        # Various price ranges/other large caps
-        'TSLA', 'META', 'V', 'WMT', 'HD',
-        # Additional diverse S&P 500 stocks
-        'CVX',  # Energy (another one for diversity)
-        'PFE',  # Healthcare (another one)
-        'BAC',  # Financials (another one)
-        'CSCO', # Technology/Networking
-        'PEP'   # Consumer Staples/Beverages
-    ]
+    test_tickers = ['NVDA'] # Changed from comprehensive_test_tickers
 
     analyzer = StockAnalyzer()
-    logger.info(f"Starting comprehensive analysis for {len(comprehensive_test_tickers)} stocks...")
+    logger.info(f"Starting analysis for {len(test_tickers)} stocks: {test_tickers}")
     results_list: List[StockAnalysis] = []
 
-    for i, ticker_symbol in enumerate(comprehensive_test_tickers, 1):
-        logger.info(f"Processing {i}/{len(comprehensive_test_tickers)}: {ticker_symbol}")
+    for i, ticker_symbol in enumerate(test_tickers, 1):
+        logger.info(f"Processing {i}/{len(test_tickers)}: {ticker_symbol}")
         analysis_result = analyzer.analyze_stock(ticker_symbol)
         if analysis_result:
-            results_list.append(analysis_result)
+            # results_list.append(analysis_result) # Optional for single test
+            if analysis_result.ticker == 'NVDA':
+                logger.info(f"--- NVDA Breakout Analysis Test ---")
+                logger.info(f"Ticker: {analysis_result.ticker}")
+                logger.info(f"Breakout Score: {analysis_result.breakout_score}") # This should be a float
+                logger.info(f"Breakout Reasons: {analysis_result.breakout_reasons}")
+                logger.info(f"--- End NVDA Test ---")
         else:
             logger.warning(f"No analysis data returned for {ticker_symbol}. It will be excluded from the report.")
 
-    logger.info(f"Successfully analyzed {len(results_list)} out of {len(comprehensive_test_tickers)} stocks.")
+    logger.info(f"Successfully analyzed {len(results_list)} out of {len(test_tickers)} stocks.")
 
-    # Process collected analysis data for summary report
-    risk_level_counts = {"Conservative": 0, "Moderate": 0, "Aggressive": 0, "Undefined": 0, "Other": 0}
-    tradeable_setups: List[StockAnalysis] = []
-    all_risk_reward_ratios: List[float] = []
-    problematic_analyses: List[str] = []
+    # Process collected analysis data for summary report - Commented out for NVDA test
+    # risk_level_counts = {"Conservative": 0, "Moderate": 0, "Aggressive": 0, "Undefined": 0, "Other": 0}
+    # tradeable_setups: List[StockAnalysis] = []
+    # all_risk_reward_ratios: List[float] = []
+    # problematic_analyses: List[str] = []
 
-    for analysis in results_list:
-        current_risk_level = analysis.risk_level if analysis.risk_level else "Undefined"
-        risk_level_counts[current_risk_level] = risk_level_counts.get(current_risk_level, 0) + 1
+    # for analysis in results_list:
+    #     current_risk_level = analysis.risk_level if analysis.risk_level else "Undefined"
+    #     risk_level_counts[current_risk_level] = risk_level_counts.get(current_risk_level, 0) + 1
 
-        if current_risk_level not in ["Undefined", "Other"] and \
-           analysis.suggested_entry_price is not None and \
-           analysis.stop_loss_price is not None and \
-           analysis.target_price_1 is not None:
-            tradeable_setups.append(analysis)
-            if analysis.risk_reward_ratio is not None and isinstance(analysis.risk_reward_ratio, (float, int)):
-                all_risk_reward_ratios.append(analysis.risk_reward_ratio)
+    #     if current_risk_level not in ["Undefined", "Other"] and \
+    #        analysis.suggested_entry_price is not None and \
+    #        analysis.stop_loss_price is not None and \
+    #        analysis.target_price_1 is not None:
+    #         tradeable_setups.append(analysis)
+    #         if analysis.risk_reward_ratio is not None and isinstance(analysis.risk_reward_ratio, (float, int)):
+    #             all_risk_reward_ratios.append(analysis.risk_reward_ratio)
 
-        if analysis.breakout_score is None:
-            problematic_analyses.append(f"Ticker {analysis.ticker}: Breakout score is None despite analysis object being present.")
+    #     if analysis.breakout_score is None:
+    #         problematic_analyses.append(f"Ticker {analysis.ticker}: Breakout score is None despite analysis object being present.")
 
-        if current_risk_level not in ["Undefined", "Other"] and \
-           (not analysis.suggested_entry_price or not analysis.stop_loss_price or not analysis.target_price_1):
-            problematic_analyses.append(f"Ticker {analysis.ticker}: Risk Level '{current_risk_level}' but missing essential trade parameters (Entry/SL/TP).")
+    #     if current_risk_level not in ["Undefined", "Other"] and \
+    #        (not analysis.suggested_entry_price or not analysis.stop_loss_price or not analysis.target_price_1):
+    #         problematic_analyses.append(f"Ticker {analysis.ticker}: Risk Level '{current_risk_level}' but missing essential trade parameters (Entry/SL/TP).")
 
-    valid_for_top_5 = [ts for ts in tradeable_setups if ts.breakout_score is not None]
-    sorted_by_breakout_score = sorted(valid_for_top_5, key=lambda x: x.breakout_score if x.breakout_score is not None else -1, reverse=True)
-    top_5_breakout_candidates = sorted_by_breakout_score[:5]
+    # valid_for_top_5 = [ts for ts in tradeable_setups if ts.breakout_score is not None]
+    # sorted_by_breakout_score = sorted(valid_for_top_5, key=lambda x: x.breakout_score if x.breakout_score is not None else -1, reverse=True)
+    # top_5_breakout_candidates = sorted_by_breakout_score[:5]
 
-    avg_rr_ratio = None
-    max_rr_value = None
-    min_rr_value = None
-    max_rr_ticker = ""
-    min_rr_ticker = ""
+    # avg_rr_ratio = None
+    # max_rr_value = None
+    # min_rr_value = None
+    # max_rr_ticker = ""
+    # min_rr_ticker = ""
 
-    if all_risk_reward_ratios:
-        avg_rr_ratio = sum(all_risk_reward_ratios) / len(all_risk_reward_ratios)
+    # if all_risk_reward_ratios:
+    #     avg_rr_ratio = sum(all_risk_reward_ratios) / len(all_risk_reward_ratios)
 
-    temp_max_rr = -float('inf')
-    temp_min_rr = float('inf')
-    for ts_setup in tradeable_setups:
-        if ts_setup.risk_reward_ratio is not None:
-            if ts_setup.risk_reward_ratio > temp_max_rr:
-                temp_max_rr = ts_setup.risk_reward_ratio
-                max_rr_ticker = ts_setup.ticker
-            if ts_setup.risk_reward_ratio < temp_min_rr:
-                temp_min_rr = ts_setup.risk_reward_ratio
-                min_rr_ticker = ts_setup.ticker
+    # temp_max_rr = -float('inf')
+    # temp_min_rr = float('inf')
+    # for ts_setup in tradeable_setups:
+    #     if ts_setup.risk_reward_ratio is not None:
+    #         if ts_setup.risk_reward_ratio > temp_max_rr:
+    #             temp_max_rr = ts_setup.risk_reward_ratio
+    #             max_rr_ticker = ts_setup.ticker
+    #         if ts_setup.risk_reward_ratio < temp_min_rr:
+    #             temp_min_rr = ts_setup.risk_reward_ratio
+    #             min_rr_ticker = ts_setup.ticker
 
-    if temp_max_rr != -float('inf'): max_rr_value = temp_max_rr
-    if temp_min_rr != float('inf'): min_rr_value = temp_min_rr
+    # if temp_max_rr != -float('inf'): max_rr_value = temp_max_rr
+    # if temp_min_rr != float('inf'): min_rr_value = temp_min_rr
 
-    # --- Generate Formatted Summary Report Output ---
-    print("\n" + "="*60)
-    print("COMPREHENSIVE BREAKOUT TRADING SYSTEM REPORT")
-    print(f"Analysis Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"Total Stocks Scanned: {len(comprehensive_test_tickers)}")
-    print(f"Successfully Processed: {len(results_list)}")
-    print("="*60 + "\n")
+    # # --- Generate Formatted Summary Report Output ---
+    # print("\n" + "="*60)
+    # print("COMPREHENSIVE BREAKOUT TRADING SYSTEM REPORT")
+    # print(f"Analysis Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    # print(f"Total Stocks Scanned: {len(test_tickers)}") # Adjusted
+    # print(f"Successfully Processed: {len(results_list)}")
+    # print("="*60 + "\n")
 
-    print("--- Risk Level Distribution ---")
-    print(f"Conservative Candidates: {risk_level_counts.get('Conservative', 0)}")
-    print(f"Moderate Candidates:     {risk_level_counts.get('Moderate', 0)}")
-    print(f"Aggressive Candidates:   {risk_level_counts.get('Aggressive', 0)}")
-    print(f"Stocks with no trade signal (Undefined Risk or low score): {risk_level_counts.get('Undefined', 0) + risk_level_counts.get('Other', 0)}")
-    print("-"*(len("--- Risk Level Distribution ---")) + "\n")
+    # print("--- Risk Level Distribution ---")
+    # print(f"Conservative Candidates: {risk_level_counts.get('Conservative', 0)}")
+    # print(f"Moderate Candidates:     {risk_level_counts.get('Moderate', 0)}")
+    # print(f"Aggressive Candidates:   {risk_level_counts.get('Aggressive', 0)}")
+    # print(f"Stocks with no trade signal (Undefined Risk or low score): {risk_level_counts.get('Undefined', 0) + risk_level_counts.get('Other', 0)}")
+    # print("-"*(len("--- Risk Level Distribution ---")) + "\n")
 
-    print("--- Top 5 Breakout Candidates (by Breakout Score) ---")
-    if top_5_breakout_candidates:
-        for i, candidate in enumerate(top_5_breakout_candidates, 1):
-            print(f"{i}. Ticker: {candidate.ticker} ({candidate.company_name or 'N/A'})")
-            print(f"   Breakout Score: {candidate.breakout_score:.2f}/100" if candidate.breakout_score is not None else "   Breakout Score: N/A")
-            print(f"   Risk Level: {candidate.risk_level or 'N/A'}")
-            print(f"   Trading Plan: {candidate.trading_strategy_summary or 'N/A'}")
-            if i < len(top_5_breakout_candidates): print("   ---") # Separator
-    else:
-        print("No tradeable breakout candidates found with sufficient score.")
-    print("-"*(len("--- Top 5 Breakout Candidates (by Breakout Score) ---")) + "\n")
+    # print("--- Top 5 Breakout Candidates (by Breakout Score) ---")
+    # if top_5_breakout_candidates:
+    #     for i, candidate in enumerate(top_5_breakout_candidates, 1):
+    #         print(f"{i}. Ticker: {candidate.ticker} ({candidate.company_name or 'N/A'})")
+    #         print(f"   Breakout Score: {candidate.breakout_score:.2f}/100" if candidate.breakout_score is not None else "   Breakout Score: N/A")
+    #         print(f"   Risk Level: {candidate.risk_level or 'N/A'}")
+    #         print(f"   Trading Plan: {candidate.trading_strategy_summary or 'N/A'}")
+    #         if i < len(top_5_breakout_candidates): print("   ---") # Separator
+    # else:
+    #     print("No tradeable breakout candidates found with sufficient score.")
+    # print("-"*(len("--- Top 5 Breakout Candidates (by Breakout Score) ---")) + "\n")
 
-    print("--- Risk/Reward Overview (for tradeable setups) ---")
-    if all_risk_reward_ratios:
-        print(f"Average Risk/Reward Ratio: {avg_rr_ratio:.2f}:1" if avg_rr_ratio is not None else "Average Risk/Reward Ratio: N/A")
-        print(f"Highest Risk/Reward Ratio: {max_rr_value:.2f}:1 (Ticker: {max_rr_ticker})" if max_rr_value is not None and max_rr_ticker else "Highest Risk/Reward Ratio: N/A")
-        print(f"Lowest Risk/Reward Ratio:  {min_rr_value:.2f}:1 (Ticker: {min_rr_ticker})" if min_rr_value is not None and min_rr_ticker else "Lowest Risk/Reward Ratio: N/A")
-    else:
-        print("No tradeable setups with Risk/Reward information available.")
-    print("-"*(len("--- Risk/Reward Overview (for tradeable setups) ---")) + "\n")
+    # print("--- Risk/Reward Overview (for tradeable setups) ---")
+    # if all_risk_reward_ratios:
+    #     print(f"Average Risk/Reward Ratio: {avg_rr_ratio:.2f}:1" if avg_rr_ratio is not None else "Average Risk/Reward Ratio: N/A")
+    #     print(f"Highest Risk/Reward Ratio: {max_rr_value:.2f}:1 (Ticker: {max_rr_ticker})" if max_rr_value is not None and max_rr_ticker else "Highest Risk/Reward Ratio: N/A")
+    #     print(f"Lowest Risk/Reward Ratio:  {min_rr_value:.2f}:1 (Ticker: {min_rr_ticker})" if min_rr_value is not None and min_rr_ticker else "Lowest Risk/Reward Ratio: N/A")
+    # else:
+    #     print("No tradeable setups with Risk/Reward information available.")
+    # print("-"*(len("--- Risk/Reward Overview (for tradeable setups) ---")) + "\n")
 
-    print("--- Issues and Observations ---")
-    if problematic_analyses:
-        print("Potential issues found during analysis (see logs for more details):")
-        for problem in problematic_analyses:
-            print(f"  - {problem}")
-    else:
-        print("No significant processing issues identified for successfully analyzed stocks.")
-    print("-"*(len("--- Issues and Observations ---")) + "\n")
+    # print("--- Issues and Observations ---")
+    # if problematic_analyses:
+    #     print("Potential issues found during analysis (see logs for more details):")
+    #     for problem in problematic_analyses:
+    #         print(f"  - {problem}")
+    # else:
+    #     print("No significant processing issues identified for successfully analyzed stocks.")
+    # print("-"*(len("--- Issues and Observations ---")) + "\n")
 
-    print("="*60)
-    print("End of Report")
-    print("="*60)
+    # print("="*60)
+    # print("End of Report")
+    # print("="*60)
 
 if __name__ == "__main__":
-    # Setup logger to show DEBUG messages for this test run if desired
-    # logging.getLogger().setLevel(logging.DEBUG) # Example: Enable DEBUG for more verbose logs
     main()
 
 # [end of stock_analyzer.py]
